@@ -1,0 +1,155 @@
+---
+title: Sui Cookbook
+description: >-
+  Copy-paste prompts for the most common Sui flows - wallet, faucet, gas, build,
+  publish.
+---
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+
+# Sui Cookbook
+
+Every prompt below has been validated against the 0.2.4-beta planner and the current `sui` CLI. Run them as-is.
+
+## Wallet
+
+### Create a new address
+
+```bash
+cmdo "create new sui address"
+```
+
+Plans `sui client new-address ed25519`. The first run also bootstraps `~/.sui/sui_config/client.yaml` if it doesn't already exist.
+
+### Show the active address
+
+```bash
+cmdo "show sui client active address" --sui
+```
+
+Plans `sui client active-address`. Use the `--sui` flag for predictability.
+
+### Show the active environment
+
+```bash
+cmdo "what is my current sui env" --sui
+```
+
+Plans `sui client active-env`. Useful before publishing — confirm you're on `testnet`, not `mainnet`.
+
+### Switch environment
+
+```bash
+cmdo "switch to testnet" --sui
+cmdo "switch to mainnet" --sui
+```
+
+Plans `sui client switch --env testnet` (or `mainnet`).
+
+## Gas
+
+### Check gas
+
+```bash
+cmdo "show my gas coins" --sui
+```
+
+Plans `sui client gas`. Each row is a coin object you can spend.
+
+### Get testnet SUI from the faucet
+
+```bash
+cmdo "give me testnet sui from faucet"
+```
+
+Commando hits the public testnet faucet directly via HTTP for the active address; you don't need to remember the URL or paste the address yourself. Wait 5-10 seconds, then re-run `cmdo "show my gas coins" --sui` to confirm.
+
+<Callout type="warn">
+  The faucet is rate-limited per address. If you get throttled, wait 60s and retry.
+</Callout>
+
+## Move
+
+All Move prompts run from a folder containing a `Move.toml`. The 0.2.4-beta planner explicitly disambiguates **build** vs **test** vs **publish** — three different verbs, three different commands.
+
+### Build
+
+```bash
+cmdo "build my move package"
+```
+
+Plans `sui move build`. **Does not** publish.
+
+### Test
+
+```bash
+cmdo "test my move package"
+```
+
+Plans `sui move test`. Streams the test runner output directly.
+
+### Publish
+
+```bash
+cmdo "publish my move package to testnet"
+```
+
+Plans `sui client publish --gas-budget 100000000 .` (or similar). Make sure you have:
+
+1. ≥ 0.1 SUI in gas (`cmdo "give me testnet sui from faucet"`).
+2. Successfully built (`cmdo "build my move package"`).
+3. Active env is `testnet` (`cmdo "switch to testnet" --sui` if not).
+
+The published package ID is in the transaction effects — Commando streams them verbatim.
+
+## Putting it together
+
+A clean "fresh machine to deployed contract" sequence on Linux/macOS:
+
+<Steps>
+  <Step>
+    ### Install + LLM key
+
+    ```bash
+    npm install -g sui-commando@beta
+    cmdo init
+    ```
+  </Step>
+  <Step>
+    ### Wallet + gas
+
+    ```bash
+    cmdo "create new sui address"
+    cmdo "switch to testnet" --sui
+    cmdo "give me testnet sui from faucet"
+    ```
+  </Step>
+  <Step>
+    ### Build + publish
+
+    ```bash
+    cd path/to/my/move/package
+    cmdo "build my move package"
+    cmdo "publish my move package to testnet"
+    ```
+  </Step>
+</Steps>
+
+Total wall time on a clean machine: ~5 minutes (mostly the binary download in step 1).
+
+## Common issues
+
+| Symptom | See |
+|---|---|
+| `could not find SUI coins with sufficient balance` | [Troubleshooting → Sui](/documentation/guides/troubleshooting#sui) |
+| `cmdo "build ..."` runs `client publish` | Upgrade to ≥ 0.2.4-beta |
+| `spawn ... ENOENT` for `sui.exe` on Linux | Upgrade to ≥ 0.2.3-beta |
+
+## Related
+
+<Cards>
+  <Card title="Walrus Sites" description="End-to-end static site deploy." href="/documentation/examples/walrus-sites" icon="Cloud" />
+  <Card title="CLI Reference" description="Every cmdo subcommand and flag." href="/documentation/reference/cli" icon="Terminal" />
+  <Card title="Troubleshooting" description="Common errors and fixes." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>

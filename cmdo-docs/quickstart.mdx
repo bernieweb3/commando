@@ -1,0 +1,141 @@
+---
+title: Quickstart
+description: Install Commando, configure an LLM provider, and run your first natural-language Sui command in under 5 minutes.
+---
+
+# Quickstart
+
+By the end of this page you'll have Commando installed, an LLM provider configured, a Sui testnet wallet, and a successful first prompt — on Windows, Linux, or macOS.
+
+## Prerequisites
+
+- **Node.js 20+** (Node 18 works but is not recommended).
+- An OpenAI API key **or** an OpenRouter API key. (OpenRouter has free tiers — see [LLM Setup](/documentation/guides/llm-setup).)
+- ~900 MB free disk space for the upstream `sui` / `walrus` / `site-builder` binaries.
+
+<Callout type="info">
+  Commando is currently published under the `beta` dist-tag. Always install with `@beta` until 1.0 ships.
+</Callout>
+
+## 1. Install Commando
+
+<Tabs items={["npm", "Skip auto-bootstrap (CI)"]}>
+  <Tab value="npm">
+    ```bash
+    npm install -g sui-commando@beta
+    ```
+
+    The `postinstall` hook detects your OS + arch, downloads the upstream binaries from GitHub releases into `~/.commando/bin/` (or `%USERPROFILE%\.commando\bin\` on Windows), patches your shell PATH, and bootstraps the Sui wallet and Walrus client config.
+  </Tab>
+  <Tab value="Skip auto-bootstrap (CI)">
+    For CI / Docker builds where you don't want a 900 MB download during `npm install`:
+
+    ```bash
+    CMDO_SKIP_BOOTSTRAP=1 npm install -g sui-commando@beta
+    cmdo bootstrap   # run later when ready
+    ```
+  </Tab>
+</Tabs>
+
+<Callout type="warn">
+  **Open a new terminal** after install so the updated PATH takes effect. On Linux/macOS you may need `source ~/.bashrc` or `source ~/.zshrc`.
+</Callout>
+
+Verify the install:
+
+```bash
+cmdo --version    # commando 0.2.4-beta
+cmdo doctor
+```
+
+`cmdo doctor` should print your platform, the path to `~/.commando/bin`, a green check that the bin folder is on PATH, and `present (+x)` (Unix) or `present` / `sha256 ok` (Windows) for each binary.
+
+## 2. Configure an LLM provider
+
+```bash
+cmdo init
+```
+
+This is interactive: pick `openai` or `openrouter`, paste an API key, and choose a model. Defaults are sane (`gpt-4o-mini` for OpenAI, `z-ai/glm-4.5-air:free` for OpenRouter).
+
+<Callout type="info">
+  Prefer environment variables? Skip `cmdo init` and just export `OPENAI_API_KEY` or `OPENROUTER_API_KEY`. See [LLM Setup](/documentation/guides/llm-setup) for the full picker logic.
+</Callout>
+
+## 3. Get a Sui testnet wallet + gas
+
+```bash
+cmdo "create new sui address"
+cmdo "give me testnet sui from faucet"
+sui client gas
+```
+
+The first command initializes the Sui keystore (`~/.sui/sui_config/`) if it does not already exist; the faucet prompt hits the public testnet faucet directly so you do not have to remember the URL.
+
+## 4. Run your first real command
+
+<Steps>
+  <Step>
+    ### Build a Move package
+
+    From any folder containing a `Move.toml`:
+
+    ```bash
+    cmdo "build my move package"
+    ```
+
+    Commando will plan `sui move build` (not `sui client publish` — the prompt rules distinguish the verbs explicitly) and stream the compiler output.
+  </Step>
+  <Step>
+    ### Deploy to Walrus Sites
+
+    From a folder containing a built static site (e.g. `./dist`):
+
+    ```bash
+    cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+    ```
+
+    The planner will emit `site-builder deploy --epochs 1 ./dist`. If you do not yet have WAL or SUI coins on testnet, the runtime hint will tell you exactly which `cmdo "..."` to run next.
+  </Step>
+  <Step>
+    ### Try Walrus directly
+
+    ```bash
+    cmdo "show walrus info" --walrus
+    cmdo "get wal" --walrus
+    ```
+  </Step>
+</Steps>
+
+## 5. Demo / offline mode
+
+No internet for the LLM call? Set the mock planner:
+
+```bash
+CMDO_LLM_MOCK=1 cmdo "show sui client active address" --sui
+```
+
+Useful for hackathon demos where the network is unreliable. The mock covers the most common Sui / Walrus / Site-builder verbs.
+
+## CLI summary
+
+| Command | Purpose |
+|---|---|
+| `cmdo <prompt>` | Default — plan and execute a natural-language request |
+| `cmdo init` | Configure LLM provider, key, and model |
+| `cmdo doctor` | Print environment status and verify binaries |
+| `cmdo bootstrap` | Re-run the install (download binaries, patch PATH, regen skills) — idempotent |
+| `cmdo update-skills` | Regenerate `~/.commando/skills/AGENT.md` from the current binaries |
+| `cmdo --version` | Print the installed version |
+
+Routing flags: `--sui`, `--walrus`, `--site-builder` force the target binary and skip the keyword inference step.
+
+## Next steps
+
+<Cards>
+  <Card title="Installation deep dive" description="Cross-platform details, PATH patching, optional R2 mirror." href="/documentation/guides/installation" icon="Download" />
+  <Card title="LLM Setup" description="OpenAI vs OpenRouter, models, and env vars." href="/documentation/guides/llm-setup" icon="Sparkles" />
+  <Card title="Sui Cookbook" description="Wallet, faucet, build, publish, gas - every common prompt." href="/documentation/examples/sui-flows" icon="BookOpen" />
+  <Card title="Walrus Sites" description="End-to-end static site deploy walkthrough." href="/documentation/examples/walrus-sites" icon="Cloud" />
+  <Card title="Troubleshooting" description="What the runtime hints mean and how to fix them." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>

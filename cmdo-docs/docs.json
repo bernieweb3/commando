@@ -1,0 +1,77 @@
+{
+  "$schema": "https://dev.cmdocs.sh/schema/docs.json",
+  "name": "Commando Docs",
+  "description": "Natural-language CLI agent for the Sui ecosystem. Cross-platform (Windows, Linux, macOS), grounded LLM planning, zero config.",
+  "favicon": "/favicon.svg",
+  "theme": {
+    "preset": "neutral",
+    "colors": {
+      "primary": "#2563EB"
+    },
+    "darkMode": true,
+    "breadcrumb": true,
+    "lastUpdated": true
+  },
+  "seo": {
+    "title": "Commando Docs",
+    "titleTemplate": "%s — Commando (cmdo)",
+    "description": "Documentation for Commando v0.2.4-beta — natural-language CLI agent for the Sui ecosystem (Windows, Linux, macOS)."
+  },
+  "navbar": {
+    "title": "Commando",
+    "logo": {
+      "light": "/logo/light-logo-only.svg",
+      "dark": "/logo/dark-logo-only.svg",
+      "display": "brand-name-and-logo"
+    },
+    "github": "https://github.com/bernieweb3/commando",
+    "links": []
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "label": "Documentation",
+        "path": "documentation",
+        "description": "Learn how to use Commando",
+        "icon": "BookOpen",
+        "groups": [
+          {
+            "label": "Getting Started",
+            "pages": [
+              { "file": "index" },
+              { "file": "quickstart" }
+            ]
+          },
+          {
+            "label": "Guides",
+            "pages": [
+              { "file": "guides/installation" },
+              { "file": "guides/architecture" },
+              { "file": "guides/llm-setup" },
+              { "file": "guides/safety" },
+              { "file": "guides/troubleshooting" }
+            ]
+          },
+          {
+            "label": "Examples",
+            "pages": [
+              { "file": "examples/sui-flows" },
+              { "file": "examples/walrus-sites" }
+            ]
+          },
+          {
+            "label": "Reference",
+            "pages": [
+              { "file": "reference/cli" },
+              { "file": "reference/env-vars" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "text": "Commando v0.2.4-beta — Built with cmdocs",
+    "copyright": "© 2026 bernieweb3"
+  }
+}

@@ -1,0 +1,30 @@
+# Commando Docs
+
+> Documentation for Commando v0.2.4-beta — natural-language CLI agent for the Sui ecosystem (Windows, Linux, macOS).
+
+## Docs
+
+- [Commando](/): Natural-language CLI agent for the Sui ecosystem. One install on Windows, Linux, or macOS - zero config, grounded intelligence.
+- [Quickstart](/quickstart): Install Commando, configure an LLM provider, and run your first natural-language Sui command in under 5 minutes.
+- [Installation](/guides/installation): Cross-platform install details, PATH patching, auto-bootstrapped configs, and the optional R2 mirror.
+- [Architecture](/guides/architecture): Components, data flow, the safety model, and the no-secrets-in-tarball posture.
+- [LLM Setup](/guides/llm-setup): Pick a provider, set a key, choose a model. Plus the offline mock planner.
+- [Safety](/guides/safety): The two-layer safety gate, what it blocks, and how to extend the patterns.
+- [Troubleshooting](/guides/troubleshooting): Common errors, what they mean, and the runtime hints Commando prints for them.
+- [Sui Cookbook](/examples/sui-flows): Copy-paste prompts for the most common Sui flows - wallet, faucet, gas, build, publish.
+- [Walrus Sites — End to End](/examples/walrus-sites): Deploy a static site to Walrus Sites with one cmdo prompt, including the testnet wallet and WAL/SUI funding steps.
+- [CLI Reference](/reference/cli): Every cmdo subcommand and flag in v0.2.4-beta.
+- [Environment Variables](/reference/env-vars): Every CMDO_*, OPENAI_*, OPENROUTER_* variable Commando reads, with defaults.
+- [Sui Cookbook](/examples\sui-flows): Copy-paste prompts for the most common Sui flows - wallet, faucet, gas, build, publish.
+- [Walrus Sites — End to End](/examples\walrus-sites): Deploy a static site to Walrus Sites with one cmdo prompt, including the testnet wallet and WAL/SUI funding steps.
+- [Architecture](/guides\architecture): Components, data flow, the safety model, and the no-secrets-in-tarball posture.
+- [Components](/guides\components): Every built-in UI component, with examples you can copy.
+- [Deploy](/guides\deploy): Ship your documentation with the cmdocs dashboard — push to deploy.
+- [Installation](/guides\installation): Cross-platform install details, PATH patching, auto-bootstrapped configs, and the optional R2 mirror.
+- [LLM Setup](/guides\llm-setup): Pick a provider, set a key, choose a model. Plus the offline mock planner.
+- [Safety](/guides\safety): The two-layer safety gate, what it blocks, and how to extend the patterns.
+- [Troubleshooting](/guides\troubleshooting): Common errors, what they mean, and the runtime hints Commando prints for them.
+- [Validate](/guides\validate): Run cmdocs check before every commit — catch broken links, typos, and schema errors locally.
+- [Writing Content](/guides\writing-content): Author your docs in MDX — Markdown plus components, no imports needed.
+- [CLI Reference](/reference\cli): Every cmdo subcommand and flag in v0.2.4-beta.
+- [Environment Variables](/reference\env-vars): Every CMDO_*, OPENAI_*, OPENROUTER_* variable Commando reads, with defaults.

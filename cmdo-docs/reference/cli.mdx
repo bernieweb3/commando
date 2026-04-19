@@ -1,0 +1,152 @@
+---
+title: CLI Reference
+description: Every cmdo subcommand and flag in v0.2.4-beta.
+---
+
+# CLI Reference
+
+`cmdo` is a Commander-based CLI. The default action takes a free-text prompt; the rest are reserved subcommand names.
+
+## Synopsis
+
+```text
+cmdo [subcommand]
+cmdo <prompt...> [--sui | --walrus | --site-builder]
+```
+
+## Global options
+
+| Option | Description |
+|---|---|
+| `-v`, `--version` | Print the installed version (e.g. `0.2.4-beta`). |
+| `-h`, `--help` | Print help. |
+
+## Subcommands
+
+### `cmdo init`
+
+Interactively configure the LLM provider, API key, and model.
+
+```bash
+cmdo init
+```
+
+Prompts:
+
+1. Provider — `openai` or `openrouter`.
+2. API key — pasted at the prompt; stored in `~/.commando/config.json`.
+3. Model — picked from a curated dropdown (or accept the default).
+
+Re-run any time to switch providers or models. Env vars (`OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_MODEL`, `OPENROUTER_MODEL`) override the stored config when present.
+
+### `cmdo doctor`
+
+Print environment status and verify installed binaries. **Read-only** — does not download or modify anything.
+
+```bash
+cmdo doctor
+```
+
+Output includes Node version, platform, install root, PATH membership, per-binary status, and LLM provider configuration. See [Troubleshooting](/documentation/guides/troubleshooting) for what to do when checks fail.
+
+Exit code: `0` if all checks pass, `1` otherwise.
+
+### `cmdo bootstrap`
+
+Download binaries, patch PATH, bootstrap external CLI configs, and (re)generate skills. **Idempotent** — safe to re-run.
+
+```bash
+cmdo bootstrap
+```
+
+Use this after a partial install (network drop), after upgrading the package, or to recover from a stale state. To force a full re-download, delete `~/.commando/bin/` first.
+
+### `cmdo update-skills`
+
+Regenerate `~/.commando/skills/AGENT.md` from the currently installed binaries' `--help` output.
+
+```bash
+cmdo update-skills
+```
+
+Run this after any of the upstream binaries change versions — the LLM planner is constrained to the contract in `AGENT.md`, so a stale contract means stale plans.
+
+### `cmdo <prompt...>`
+
+The default action. Anything that isn't a known subcommand is treated as a natural-language prompt.
+
+```bash
+cmdo "show sui client active address"
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+cmdo create new sui address     # quotes are optional for simple prompts
+```
+
+#### Routing flags
+
+If multiple are passed, the first one wins.
+
+| Flag | Forces |
+|---|---|
+| `--sui` | Plan against the `sui` binary skill section only. |
+| `--walrus` | Plan against the `walrus` binary skill section only. |
+| `--site-builder` | Plan against the `site-builder` binary skill section only. |
+
+When no flag is passed, the router infers the target from prompt keywords. Always pass the explicit flag in scripts and demos for predictability.
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Plan succeeded, executed, and exited 0. |
+| `1` | Generic failure (LLM error, validation failure, spawn failure, exec non-zero). |
+| `>1` | Underlying binary's exit code is propagated. |
+
+## Examples
+
+### Wallet
+
+```bash
+cmdo "create new sui address"
+cmdo "show sui client active address" --sui
+cmdo "switch to testnet" --sui
+cmdo "give me testnet sui from faucet"
+```
+
+### Move
+
+```bash
+cmdo "build my move package"
+cmdo "test my move package"
+cmdo "publish my move package to testnet"
+```
+
+### Walrus
+
+```bash
+cmdo "show walrus info" --walrus
+cmdo "get wal" --walrus
+cmdo "list my blobs" --walrus
+```
+
+### Walrus Sites
+
+```bash
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+cmdo "run site-builder deploy --epochs 1 ./dist" --site-builder
+cmdo "show sitemap for site 0x..." --site-builder
+```
+
+## Where the binary lives
+
+| OS | Path |
+|---|---|
+| Windows | `%APPDATA%\npm\cmdo.cmd` (npm global bin) → `%USERPROFILE%\.commando\bin\` for upstream binaries |
+| Linux / macOS | `$(npm bin -g)/cmdo` → `~/.commando/bin/` for upstream binaries |
+
+## Related
+
+<Cards>
+  <Card title="Env Vars" description="Every environment variable cmdo reads." href="/documentation/reference/env-vars" icon="Settings" />
+  <Card title="LLM Setup" description="Provider, key, and model details for cmdo init." href="/documentation/guides/llm-setup" icon="Sparkles" />
+  <Card title="Troubleshooting" description="When a subcommand misbehaves." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>

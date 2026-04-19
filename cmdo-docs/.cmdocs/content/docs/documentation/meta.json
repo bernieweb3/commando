@@ -1,0 +1,16 @@
+{
+  "title": "Documentation",
+  "description": "Learn how to use Commando",
+  "root": true,
+  "pages": [
+    "---Getting Started---",
+    "index",
+    "quickstart",
+    "---Guides---",
+    "guides",
+    "---Examples---",
+    "examples",
+    "---Reference---",
+    "reference"
+  ]
+}

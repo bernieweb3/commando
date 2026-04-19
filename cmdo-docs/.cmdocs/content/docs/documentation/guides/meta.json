@@ -1,0 +1,11 @@
+{
+  "title": "Guides",
+  "defaultOpen": true,
+  "pages": [
+    "installation",
+    "architecture",
+    "llm-setup",
+    "safety",
+    "troubleshooting"
+  ]
+}

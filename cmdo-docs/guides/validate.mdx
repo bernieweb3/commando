@@ -1,0 +1,153 @@
+---
+title: Validate
+description: Run cmdocs check before every commit — catch broken links, typos, and schema errors locally.
+---
+
+# Validate
+
+`cmdocs check` is a fast, CI-friendly lint that catches the mistakes most likely to break your docs site. Run it locally before committing and wire it into CI so broken pages never reach `main`.
+
+## What it checks
+
+| Check | Example failure |
+|---|---|
+| **docs.json schema** | `name is required` · `Expected hex color (#RRGGBB)` · unknown field |
+| **Duplicate tab paths** | Two tabs both resolve to `/api` — hard error |
+| **Duplicate page files** | The same `.mdx` file listed under two groups |
+| **Navigation → MDX** | `Missing MDX: guides/setup.mdx (referenced in "Documentation" > "Guides")` |
+| **MDX frontmatter** | `Missing frontmatter "title" in: quickstart.mdx` |
+| **Assets** | `Missing logo: public/logo/dark.svg` |
+| **Internal links** | `Broken link in index.mdx:42: "/documentation/missing-page"` |
+
+Exit code `0` means you're clean. Exit code `1` prints every failure with a file and line number, suitable for a terminal or CI log.
+
+## Run it locally
+
+```bash
+npx cmdocs check
+```
+
+Point at a specific source directory if your docs aren't at the repo root:
+
+```bash
+npx cmdocs check --source ./docs
+```
+
+### Sample output
+
+**All checks pass:**
+
+```
+ℹ Checking docs.json...
+✓ Loaded "My Documentation"
+ℹ Checking navigation references...
+ℹ Checking MDX frontmatter...
+ℹ Checking assets...
+ℹ Checking internal links...
+✓ All checks passed
+```
+
+**A broken link:**
+
+```
+ℹ Checking internal links...
+✖ Broken link in guides/writing-content.mdx:42: "/documentation/missing-page"
+✖ 1 error found
+```
+
+## Pre-commit hook (recommended)
+
+Block bad commits before they happen. Pick whichever style fits your project.
+
+### Option 1 — Native git hook (zero dependencies)
+
+Create `.git/hooks/pre-commit` (or use [a tracked hooks folder](https://git-scm.com/docs/githooks#_description) via `git config core.hooksPath`):
+
+```bash
+#!/usr/bin/env bash
+npx cmdocs check
+```
+
+Make it executable:
+
+```bash
+chmod +x .git/hooks/pre-commit
+```
+
+### Option 2 — Husky (tracked in git)
+
+If you already use [Husky](https://typicode.github.io/husky/), add cmdocs check to the pre-commit hook:
+
+```bash
+npx husky init
+echo 'npx cmdocs check' >> .husky/pre-commit
+```
+
+Commit `.husky/pre-commit` — every contributor who runs `npm install` gets the hook automatically.
+
+<Callout type="info">
+  `cmdocs check` runs the full validation in well under a second for typical docs sites. Keep it in pre-commit — it's faster than running the type-checker.
+</Callout>
+
+## CI validation
+
+Add a validation step on every pull request so broken docs can't merge.
+
+### GitHub Actions
+
+```yaml title=".github/workflows/docs.yml"
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - "**/*.mdx"
+      - "docs.json"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npx cmdocs check
+```
+
+### GitLab CI
+
+```yaml title=".gitlab-ci.yml"
+docs-check:
+  image: node:20
+  script:
+    - npx cmdocs check
+  rules:
+    - changes:
+        - "**/*.mdx"
+        - "docs.json"
+```
+
+## Troubleshooting
+
+<Accordions>
+  <Accordion title="An asset exists but check says it's missing">
+    `cmdocs check` looks for assets under `public/`. If your favicon is at `public/favicon.svg`, set `"favicon": "/favicon.svg"` (leading slash, no `public/` prefix) in `docs.json`.
+  </Accordion>
+  <Accordion title="A link is valid but check flags it as broken">
+    Internal links must match a page URL exactly. Tab-prefixed URLs need the tab `path`: a page with `file: "quickstart"` inside a tab with `path: "documentation"` lives at `/documentation/quickstart`, not `/quickstart`. Hash fragments (`/documentation/quickstart#section`) are stripped before validation, so those always pass.
+  </Accordion>
+  <Accordion title="I need to skip a specific check">
+    There is no skip flag — every failure is actionable. If you hit a false positive (e.g. a reference to an asset you know exists outside `public/`), open an issue with the reproducer.
+  </Accordion>
+  <Accordion title="My docs use shorthand `tab` / `group` / string pages">
+    Those still work but emit a deprecation warning on every run. Migrate to `label` + `path` on tabs and groups, and object-form pages `{ "file": "..." }` — see [Writing Content](/documentation/guides/writing-content).
+  </Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Deploy" description="Push to the cmdocs dashboard and go live." href="/documentation/guides/deploy" icon="Cloud" />
+  <Card title="Writing Content" description="MDX basics and frontmatter reference." href="/documentation/guides/writing-content" icon="PencilLine" />
+</Cards>

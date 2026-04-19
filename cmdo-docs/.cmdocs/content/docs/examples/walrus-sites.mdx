@@ -1,0 +1,143 @@
+---
+title: Walrus Sites — End to End
+description: >-
+  Deploy a static site to Walrus Sites with one cmdo prompt, including the
+  testnet wallet and WAL/SUI funding steps.
+---
+import { Callout } from 'fumadocs-ui/components/callout';
+
+
+# Walrus Sites — End to End
+
+This walkthrough takes you from a freshly built static site (`./dist`) to a live Walrus Sites URL using only `cmdo` prompts. Tested on Ubuntu x86_64 with Commando 0.2.4-beta.
+
+<Callout type="warn">
+  Walrus Sites requires `site-builder`, which is **not** available on `linux-aarch64`. Use Windows, Linux x86_64, or macOS.
+</Callout>
+
+## Prerequisites
+
+- Commando ≥ 0.2.4-beta installed and `cmdo doctor` is green.
+- A built static site folder (e.g. `./dist` from `npm run build`). ~1 MB is plenty for a first deploy.
+- An LLM provider configured (`cmdo init`), or `CMDO_LLM_MOCK=1` for offline mode.
+
+## 1. Wallet + gas
+
+You need a Sui testnet wallet with ≥ 0.5 SUI. If you already have one, skip ahead.
+
+```bash
+cmdo "create new sui address"
+cmdo "switch to testnet" --sui
+cmdo "give me testnet sui from faucet"
+sui client gas
+```
+
+Confirm at least one coin with balance ≥ `500000000` MIST (= 0.5 SUI). Re-run the faucet prompt if needed.
+
+## 2. WAL coins
+
+Walrus Sites pays for blob storage in WAL. Fetch some testnet WAL:
+
+```bash
+cmdo "get wal" --walrus
+```
+
+This plans `walrus get-wal`, which uses your active SUI to mint testnet WAL via the WAL exchange. Run twice if your first deploy is large (~10 MB site needs more WAL than a 1 MB site).
+
+<Callout type="info">
+  If you see `could not find WAL coins with sufficient balance` during the deploy step, your Walrus context is probably set to `mainnet` while your WAL is on `testnet`. See the [WAL coin troubleshooting entry](/documentation/guides/troubleshooting#error-could-not-find-wal-coins-with-sufficient-balance).
+</Callout>
+
+## 3. Sites config
+
+`site-builder` requires `~/.config/walrus/sites-config.yaml`. **Not** auto-bootstrapped in 0.2.4-beta:
+
+```bash
+mkdir -p ~/.config/walrus
+curl -L -o ~/.config/walrus/sites-config.yaml \
+  https://raw.githubusercontent.com/MystenLabs/walrus-sites/main/sites-config.yaml
+
+# Make sure the context matches your wallet (testnet)
+sed -i 's/^default_context: mainnet$/default_context: testnet/' \
+  ~/.config/walrus/sites-config.yaml
+```
+
+Verify:
+
+```bash
+grep '^default_context' ~/.config/walrus/sites-config.yaml
+# expected: default_context: testnet
+```
+
+## 4. Deploy
+
+From the folder containing your built site:
+
+```bash
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+```
+
+The planner emits something like `site-builder deploy --epochs 1 ./dist`. Commando spawns it, streams progress, and prints the resulting site object ID and URL on success.
+
+Equivalent explicit prompt if you want to control the epoch count:
+
+```bash
+cmdo "run site-builder deploy --epochs 5 ./dist" --site-builder
+```
+
+`--epochs N` controls how many storage epochs the site is paid for upfront. 1 epoch ≈ 24 hours on testnet at the time of writing.
+
+## 5. Verify
+
+The deploy output includes a Sui object ID for your site (e.g. `0xabc...`). Browse it:
+
+- **Walrus Sites portal:** `https://<base36-of-object-id>.walrus.site`
+- **Inspect via site-builder:**
+
+  ```bash
+  cmdo "show sitemap for site 0xabc..." --site-builder
+  ```
+
+  Plans `site-builder sitemap 0xabc...`.
+
+## 6. Update later
+
+To push a new version of the site to the same object ID:
+
+```bash
+cmdo "update walrus site 0xabc... from ./dist" --site-builder
+```
+
+Plans `site-builder update --epochs 1 ./dist 0xabc...`. Same WAL/SUI cost rules apply.
+
+## End-to-end timing
+
+On a clean Ubuntu VPS (Commando 0.2.4-beta, ~860 KB site):
+
+| Step | Wall time |
+|---|---|
+| Install + bootstrap | ~3 min (binary download) |
+| Wallet + faucet | ~30 s |
+| `walrus get-wal` | ~30 s |
+| `site-builder deploy` (1 epoch, 1 MB) | ~60 s |
+| **Total** | **~5 min** |
+
+## Troubleshooting checklist
+
+| Error | Fix |
+|---|---|
+| `could not find a valid sites configuration file` | Run the curl command in step 3. |
+| `could not find WAL coins with sufficient balance` | Check both `client_config.yaml` and `sites-config.yaml` are on `testnet`, then `cmdo "get wal" --walrus`. |
+| `could not find SUI coins with sufficient balance` | `cmdo "give me testnet sui from faucet"`, wait, retry. |
+| `missing <DIRECTORY>` | Be explicit: `cmdo "run site-builder deploy --epochs 1 ./dist" --site-builder`. |
+| `site-builder: missing` on `cmdo doctor` | You're on `linux-aarch64`. Deploy from x86_64 instead. |
+
+Full table: [Troubleshooting](/documentation/guides/troubleshooting).
+
+## Related
+
+<Cards>
+  <Card title="Sui Cookbook" description="Wallet, faucet, build, publish - the prerequisites for any chain operation." href="/documentation/examples/sui-flows" icon="BookOpen" />
+  <Card title="CLI Reference" description="site-builder routing flag and the full subcommand list." href="/documentation/reference/cli" icon="Terminal" />
+  <Card title="Troubleshooting" description="Every Walrus / site-builder error in one place." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>

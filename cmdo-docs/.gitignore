@@ -1,0 +1,40 @@
+# Keep the .cmdocs/ scaffold under version control (cli.json, source.config.ts,
+# mdx-components.tsx, package.json, tsconfig.json, ...) so the docs project is
+# reproducible on a fresh clone.
+#
+# But NEVER commit anything Next.js / Turbopack / npm regenerate locally:
+# - .cmdocs/.next/         build cache (hundreds of MB, blows past GitHub's 100 MB limit)
+# - .cmdocs/node_modules/  dependencies (use `npm install` to recreate)
+# - .cmdocs/bun.lock       lockfile is fine to keep, but the bun cache is not
+.cmdocs/.next/
+.cmdocs/node_modules/
+.cmdocs/.turbo/
+.cmdocs/out/
+.cmdocs/dist/
+
+# Direct Node artefacts in case anything ends up at the project root.
+node_modules/
+dist/
+.next/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun-debug.log*
+
+# Environment files - never commit secrets.
+.env
+.env.*
+!.env.example
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,122 @@
+---
+title: Deploy
+description: Ship your documentation with the cmdocs dashboard — push to deploy.
+---
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+
+# Deploy
+
+cmdocs is push-to-deploy. Connect your GitHub repo in the [cmdocs dashboard](https://cmdocs.sh), and every commit to your tracked branch produces a new build and deploys automatically. No CLI export, no manual uploads, no hosting config to maintain.
+
+## What you get
+
+| Feature | Description |
+|---|---|
+| **Git integration** | One-click GitHub OAuth + repo picker; webhooks configured for you |
+| **Auto-builds on push** | Every commit to your tracked branch produces a fresh deployment |
+| **Multiple environments** | Production, staging, and preview branches — each tracking its own branch |
+| **Subdomain + HTTPS** | Each environment gets `<slug>.cmdocs.app` with TLS provisioned automatically |
+| **Custom domains** | Bring your own domain — DNS instructions in project settings |
+| **Build logs** | Live, streaming logs per build; errors surface inline |
+| **Deployment history** | Roll back to any previous deployment in one click |
+
+## How it works
+
+<Mermaid chart="sequenceDiagram
+    participant Dev as You
+    participant GH as GitHub
+    participant API as cmdocs API
+    participant W as Build Worker
+    participant CDN as cmdocs CDN
+    Dev->>GH: git push main
+    GH->>API: webhook (HMAC verified)
+    API->>API: create deployment (queued)
+    API->>W: enqueue build job
+    W->>GH: clone repo
+    W->>W: run cmdocs pipeline
+    W->>W: static export (HTML + CSS + JS)
+    W->>API: upload artifacts
+    API->>CDN: publish
+    CDN-->>Dev: site live at subdomain" />
+
+A typical build finishes in under a minute.
+
+## Walkthrough
+
+<Steps>
+  <Step>
+    ### Sign in
+
+    Go to [cmdocs.sh](https://cmdocs.sh) and sign in with GitHub.
+  </Step>
+  <Step>
+    ### Install the cmdocs GitHub App
+
+    The dashboard prompts you to install the cmdocs GitHub App. Grant it access to the repos you want to deploy — you can pick a single repo or your whole org.
+  </Step>
+  <Step>
+    ### Create a project
+
+    Click **New project**, select your docs repository, and confirm the default branch (usually `main`).
+  </Step>
+  <Step>
+    ### Watch the first build
+
+    The first build starts automatically. Watch the logs stream live in the dashboard. When the build turns green, your site is reachable at `<your-slug>.cmdocs.app`.
+  </Step>
+  <Step>
+    ### Push to deploy
+
+    Every subsequent commit to the tracked branch triggers a new build. Roll back to any previous version from the Deployments tab.
+  </Step>
+</Steps>
+
+<Callout type="info">
+  Before you push, run `npx cmdocs check` locally — it runs the same validation the build worker does and catches typos, missing pages, and broken links before they consume CI minutes. See the [Validate guide](/documentation/guides/validate) to wire it into a pre-commit hook.
+</Callout>
+
+## Environments
+
+Every project starts with a **production** environment tracking `main`. Add more environments for staging or feature branches:
+
+| Environment | Branch | Subdomain | Triggers on |
+|---|---|---|---|
+| `production` | `main` | `<slug>.cmdocs.app` | Push to `main` |
+| `staging` | `develop` | `<slug>-staging.cmdocs.app` | Push to `develop` |
+| `preview` | any PR | `<slug>-pr-<n>.cmdocs.app` | PR opened/updated |
+
+Configure them under **Project → Settings → Environments**.
+
+## Custom domains
+
+Add your own domain under **Project → Settings → Domains**. The dashboard walks you through the DNS records to add at your registrar and provisions TLS via Let's Encrypt automatically once DNS propagates.
+
+## Troubleshooting
+
+<Accordions>
+  <Accordion title="My build failed with a schema error">
+    Run `npx cmdocs check` locally — it will surface the exact schema problem before you push. The build worker runs the same validation; if it fails, the error message in the dashboard is the same you'll see locally.
+  </Accordion>
+  <Accordion title="The site is live but images are 404ing">
+    Assets must live under `public/` in your repo. A path like `public/images/hero.png` is served at `/images/hero.png`. If an asset is missing, `cmdocs check` catches it for files referenced in `docs.json`; assets referenced only from MDX still need to be under `public/`.
+  </Accordion>
+  <Accordion title="I want to use a monorepo with docs in a subdirectory">
+    In project settings, set the **Source directory** to the path of your `docs.json` (for example, `docs/` or `apps/docs/`). The dashboard only rebuilds when files inside that directory change.
+  </Accordion>
+  <Accordion title="Can I preview a branch without making it production?">
+    Yes — add a new environment tracking that branch. Or enable PR previews: every open PR gets its own `<slug>-pr-<n>.cmdocs.app` deployment that updates on each push.
+  </Accordion>
+  <Accordion title="I need to roll back a broken deploy">
+    Open the **Deployments** tab, find the last known-good deployment, and click **Promote**. It's instant — no rebuild.
+  </Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Validate" description="Run cmdocs check before every commit." href="/documentation/guides/validate" icon="ShieldCheck" />
+  <Card title="Writing Content" description="Add pages, configure navigation, tweak SEO." href="/documentation/guides/writing-content" icon="PencilLine" />
+</Cards>

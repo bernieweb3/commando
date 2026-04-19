@@ -1,0 +1,102 @@
+---
+title: Environment Variables
+description: Every CMDO_*, OPENAI_*, OPENROUTER_* variable Commando reads, with defaults.
+---
+
+# Environment Variables
+
+All variables are read at process start. There is no live reload — change the env, then re-run `cmdo`.
+
+## Installer
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CMDO_SKIP_BOOTSTRAP` | unset | Any non-empty value other than `0` / `false` skips the postinstall download. Use `cmdo bootstrap` later. |
+| `CMDO_DOWNLOAD_CONCURRENCY` | `3` | Parallel downloads during bootstrap. Lower on flaky networks. |
+| `CMDO_DOWNLOAD_IDLE_MS` | `120000` | Per-chunk idle timeout in milliseconds. Increase for slow links. |
+| `CMDO_DOWNLOAD_RETRIES` | `3` | Attempts per file before giving up. |
+
+## Optional R2 manifest mirror (Windows only)
+
+The R2 path is **off by default**. Set both vars to enable. When either is missing, the install falls back to GitHub-direct.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CMDO_MANIFEST_URL` | unset | Full URL to the manifest JSON in R2 (or any compatible mirror). |
+| `CMDO_R2_TOKEN` | unset | Bearer/header token the worker accepts. |
+
+<Callout type="warn">
+  No secret is shipped inside the npm tarball — both halves must come from the operator's environment. See [Installation](/documentation/guides/installation) for the security rationale.
+</Callout>
+
+## LLM provider
+
+Env vars override the values stored by `cmdo init` in `~/.commando/config.json`.
+
+### OpenAI
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENAI_API_KEY` | unset | Required if provider is OpenAI and no config file exists. |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Override the model. Any string accepted by the OpenAI API. |
+
+### OpenRouter
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENROUTER_API_KEY` | unset | Required if provider is OpenRouter and no config file exists. |
+| `OPENROUTER_MODEL` | `z-ai/glm-4.5-air:free` | Override the model. Any string accepted by OpenRouter. |
+
+## Planner
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CMDO_LLM_MOCK` | `0` | Set to `1` to bypass the LLM and use the deterministic regex-based mock planner. Useful for offline demos and CI. |
+
+## Logging
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CMDO_LOG_LEVEL` | `info` | One of `debug`, `info`, `warn`, `error`. `debug` adds raw LLM input/output and validator decisions. |
+| `NO_COLOR` | unset | Standard env: any non-empty value disables ANSI colors. |
+
+## Examples
+
+### CI build that defers the binary download
+
+```bash
+CMDO_SKIP_BOOTSTRAP=1 npm install -g sui-commando@beta
+# ... later, only on the runner that needs the CLIs:
+cmdo bootstrap
+```
+
+### Air-gapped install pulling from a private R2 mirror
+
+```powershell
+# Windows PowerShell
+$env:CMDO_MANIFEST_URL = "https://r2.internal/object?key=manifests/commando-0.2.4-beta.json"
+$env:CMDO_R2_TOKEN     = "<bearer-token-the-worker-accepts>"
+npm install -g sui-commando@beta
+```
+
+### Prefer env-only LLM setup (no `cmdo init`)
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+export OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
+cmdo "show walrus info" --walrus
+```
+
+### Offline hackathon demo
+
+```bash
+CMDO_LLM_MOCK=1 cmdo "show sui client active address" --sui
+```
+
+## Related
+
+<Cards>
+  <Card title="CLI Reference" description="Every cmdo subcommand and flag." href="/documentation/reference/cli" icon="Terminal" />
+  <Card title="Installation" description="When and why each installer var matters." href="/documentation/guides/installation" icon="Download" />
+  <Card title="LLM Setup" description="Provider/model decision tree." href="/documentation/guides/llm-setup" icon="Sparkles" />
+</Cards>

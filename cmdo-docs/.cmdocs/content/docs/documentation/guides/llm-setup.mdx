@@ -1,0 +1,135 @@
+---
+title: LLM Setup
+description: 'Pick a provider, set a key, choose a model. Plus the offline mock planner.'
+---
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+
+# LLM Setup
+
+Commando uses an LLM to plan each command. You can use **OpenAI**, **OpenRouter**, or skip the LLM entirely with the deterministic **mock planner**.
+
+## Quick decision
+
+<Cards>
+  <Card title="OpenAI" description="Best plan quality. Pay-as-you-go. Good default: gpt-4o-mini (cheap + fast)." icon="Sparkles" />
+  <Card title="OpenRouter" description="Single API for many models, including free tiers. Good default: z-ai/glm-4.5-air:free." icon="Layers" />
+  <Card title="Mock planner" description="No LLM call. Deterministic regex-based planning for the most common verbs. Useful for offline demos and CI." icon="ShieldCheck" />
+</Cards>
+
+## Interactive setup
+
+```bash
+cmdo init
+```
+
+This prompts you for:
+
+1. Provider — `openai` or `openrouter`.
+2. API key — pasted at the prompt, stored in `~/.commando/config.json`.
+3. Model — picked from a curated dropdown.
+
+Re-run `cmdo init` any time to switch providers or models.
+
+## Manual / env-only setup
+
+If you'd rather not store the key on disk, set env vars and skip `cmdo init`. Commando looks for env vars **before** falling back to `~/.commando/config.json`.
+
+<Tabs items={["OpenAI", "OpenRouter"]}>
+  <Tab value="OpenAI">
+    ```bash
+    export OPENAI_API_KEY=sk-...
+    export OPENAI_MODEL=gpt-4o-mini   # optional, defaults to gpt-4o-mini
+    ```
+  </Tab>
+  <Tab value="OpenRouter">
+    ```bash
+    export OPENROUTER_API_KEY=sk-or-...
+    export OPENROUTER_MODEL=z-ai/glm-4.5-air:free   # optional
+    ```
+  </Tab>
+</Tabs>
+
+On Windows PowerShell:
+
+```powershell
+$env:OPENAI_API_KEY = "sk-..."
+$env:OPENAI_MODEL   = "gpt-4o-mini"
+```
+
+## Curated OpenAI models
+
+The `cmdo init` picker keeps the list tight (one screen). Power users can override via `OPENAI_MODEL`.
+
+| ID | Note |
+|---|---|
+| `gpt-4o` | Flagship, best for complex plans |
+| `gpt-4o-mini` | Cheap + fast, good default |
+| `gpt-4.1` | Next-gen flagship |
+| `gpt-4.1-mini` | Smaller 4.1 tier |
+| `o3-mini` | Reasoning model |
+| `o4-mini` | Newer reasoning model |
+
+**Default:** `gpt-4o-mini`.
+
+## OpenRouter
+
+OpenRouter exposes a single OpenAI-compatible endpoint that proxies to dozens of providers. The default model `z-ai/glm-4.5-air:free` works without spend, which makes it ideal for first-run testing.
+
+**Default:** `z-ai/glm-4.5-air:free`.
+
+Override with `OPENROUTER_MODEL` (e.g. `anthropic/claude-3.5-sonnet`, `openai/gpt-4o-mini`, `meta-llama/llama-3.1-70b-instruct`).
+
+## How Commando uses the LLM
+
+The planner sends a hard-rules system prompt plus a **scoped** slice of `AGENT.md` (only the section for the routed binary). It expects a single JSON object back:
+
+```json
+{
+  "binary": "sui",
+  "args": ["client", "active-address"]
+}
+```
+
+Output is parsed defensively (markdown fences, smart quotes, and surrounding prose are all tolerated). The plan is then validated against the allowlist built from `AGENT.md`:
+
+- `binary` must be one of `sui` / `walrus` / `site-builder` (with the platform-correct suffix).
+- The leading non-flag tokens of `args` must form a real command path.
+- Every flag must exist in the skill contract for that command path.
+
+A failed validation triggers a retry with a tighter hint instead of executing a hallucinated command.
+
+<Callout type="info">
+  Want to see the full system prompt and validation logic? Read `src/llm/planner.ts` in the [Commando repo](https://github.com/MystenLabs/sui-commando).
+</Callout>
+
+## Offline / demo mode
+
+Set `CMDO_LLM_MOCK=1` to bypass the LLM entirely:
+
+```bash
+CMDO_LLM_MOCK=1 cmdo "show sui client active address" --sui
+```
+
+The mock covers:
+
+- **Sui** — `client active-address`, `client active-env`, `client new-address`, `client gas`, `client switch --env`, `client publish`, `move build`, `move test`.
+- **Walrus** — `info`, `list-blobs`, `get-wal`, basic store/read scaffolding.
+- **Site-builder** — `deploy <DIRECTORY> --epochs <N>`, `sitemap`, `update`.
+
+Use it for hackathon demos, CI smoke tests, or to rule out the LLM as a source of bugs while debugging.
+
+## Cost notes
+
+- `gpt-4o-mini` typically costs less than $0.001 per planning call (the prompts are small — usually under 2 KB).
+- OpenRouter free tiers have rate limits; switch to a paid model if you hit them during a demo.
+- The planner makes **one** LLM call per `cmdo` invocation under happy path; one extra call per validation retry (max 2 retries by default).
+
+## Next
+
+<Cards>
+  <Card title="Safety" description="What gets blocked before reaching the LLM, and what gets blocked after." href="/documentation/guides/safety" icon="Lock" />
+  <Card title="Sui Cookbook" description="Copy-paste prompts for the most common Sui flows." href="/documentation/examples/sui-flows" icon="BookOpen" />
+  <Card title="Env Vars" description="Every CMDO_*, OPENAI_*, OPENROUTER_* variable in one place." href="/documentation/reference/env-vars" icon="Settings" />
+</Cards>

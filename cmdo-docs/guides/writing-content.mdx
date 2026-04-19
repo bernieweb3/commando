@@ -1,0 +1,167 @@
+---
+title: Writing Content
+description: Author your docs in MDX — Markdown plus components, no imports needed.
+---
+
+# Writing Content
+
+cmdocs uses [MDX](https://mdxjs.com/) — a format that lets you use components inside Markdown. All built-in components are auto-imported, so you never need to write `import` statements.
+
+## Frontmatter
+
+Every page starts with a YAML frontmatter block at the top of the file:
+
+```yaml
+---
+title: Page Title
+description: A short description of the page.
+---
+```
+
+<TypeTable
+  type={{
+    title: { description: "Page title — shown in the heading and sidebar.", type: "string", required: true },
+    description: { description: "Page description — used for SEO meta tags and search results.", type: "string" },
+    icon: { description: "Lucide icon name shown next to the page in the sidebar.", type: "string" },
+    full: { description: "Hide the table of contents and use a full-width layout.", type: "boolean", default: "false" },
+  }}
+/>
+
+<Callout type="info">
+  **SEO tips**
+  - Keep `description` under 160 characters — longer descriptions get truncated in search results.
+  - Use a concrete verb in the `title` (e.g. "Install the CLI" not just "Installation") so search snippets read well.
+  - Add a global `seo.ogImage` in `docs.json` to set the default social preview image; override per-page later when you add one.
+</Callout>
+
+## Markdown basics
+
+All standard Markdown features work as you'd expect.
+
+### Text formatting
+
+```md
+**Bold**, *italic*, ~~strikethrough~~, and `inline code`.
+```
+
+### Links
+
+```md
+[External link](https://example.com)
+[Internal link](/documentation/quickstart)
+```
+
+Internal links use absolute paths starting from the site root.
+
+### Lists
+
+```md
+- Unordered item
+- Another item
+  - Nested item
+
+1. Ordered item
+2. Another item
+```
+
+### Blockquotes
+
+```md
+> A quote.
+> Spans multiple lines.
+```
+
+### Code blocks
+
+Use fenced code blocks with a language identifier for syntax highlighting:
+
+````md
+```typescript
+function greet(name: string): string {
+  return `Hello, ${name}!`;
+}
+```
+````
+
+You can also add a `title` to the block:
+
+````md
+```ts title="src/greet.ts"
+export const greet = (name: string) => `Hello, ${name}!`;
+```
+````
+
+### Tables
+
+```md
+| Column 1 | Column 2 |
+|----------|----------|
+| Cell A   | Cell B   |
+| Cell C   | Cell D   |
+```
+
+### Images
+
+Place images in the `public/` folder and reference them with an absolute path. `public/logo/light.svg` is served at `/logo/light.svg`:
+
+```md
+![My logo](/logo/light.svg)
+```
+
+For full-size images, put them under `public/images/` and reference with the matching path:
+
+```md
+![Architecture diagram](/images/architecture.png)
+```
+
+All images are zoomable — click any image to expand it.
+
+## JSX components
+
+The point of MDX is using components inline. Just type the component — no import needed:
+
+```mdx
+<Callout type="info">
+  This is an informational callout.
+</Callout>
+```
+
+<Callout type="info">
+  This is an informational callout.
+</Callout>
+
+See [Components](/documentation/guides/components) for the full list with examples.
+
+## Tips
+
+<Accordions>
+  <Accordion title="Where do new pages go?">
+    Anywhere under your project root. Then add the page as an object to `docs.json` under the appropriate `pages` array:
+
+    ```json
+    { "file": "guides/my-new-page" }
+    ```
+
+    The `file` field is the MDX path without `.mdx`. Add `path` to override the URL or `label` to override the sidebar display.
+  </Accordion>
+  <Accordion title="Can I nest pages in folders?">
+    Yes. A file at `guides/setup.mdx` declared as `{ "file": "guides/setup" }` lives at the URL `/documentation/guides/setup` (where `documentation` is the tab `path`).
+  </Accordion>
+  <Accordion title="How do I link between pages?">
+    Use a Markdown link with the absolute URL: `[Deploy guide](/documentation/guides/deploy)`. `cmdocs check` validates every internal link — broken links fail the check.
+  </Accordion>
+  <Accordion title="Can I hide the table of contents on a page?">
+    Yes — set `full: true` in the page's frontmatter.
+  </Accordion>
+  <Accordion title="Where do I put images?">
+    In `public/`. Anything there is served at the matching URL — `public/images/hero.png` becomes `/images/hero.png`. SVG is preferred for logos and diagrams (sharper on retina, smaller payload).
+  </Accordion>
+</Accordions>
+
+## Next
+
+<Cards>
+  <Card title="Components" description="Every built-in component, with examples." href="/documentation/guides/components" icon="Layers" />
+  <Card title="Validate" description="Catch typos and broken links before committing." href="/documentation/guides/validate" icon="ShieldCheck" />
+  <Card title="Deploy" description="Push to the cmdocs dashboard." href="/documentation/guides/deploy" icon="Cloud" />
+</Cards>

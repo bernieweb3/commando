@@ -1,0 +1,3557 @@
+# Commando (/)
+
+# Commando
+
+> One Command. Zero Config. Grounded Intelligence.
+
+**Commando (`cmdo`)** is a local-first CLI agent that turns plain-English (or Vietnamese!) intent into safe, validated `sui` / `walrus` / `site-builder` commands. It downloads the upstream Mysten Labs binaries for you, bootstraps the wallet and config files you would otherwise hit as paper-cuts on first run, and uses an LLM grounded in **live `--help` output** to plan each command.
+
+<Callout type="info">
+  **Current release: `v0.2.4-beta`** — cross-platform (Windows / Linux / macOS), GitHub-direct binary downloads, no secrets shipped in the npm tarball.
+</Callout>
+
+## Why Commando
+
+<Cards>
+  <Card title="Zero setup" description="One npm install puts sui, walrus, and site-builder on your PATH and bootstraps every config file they need." icon="Rocket" />
+  <Card title="Grounded LLM" description="The planner is constrained to commands and flags parsed from each binary's --help output, with strict allowlist validation." icon="ShieldCheck" />
+  <Card title="Cross-platform" description="Same one-line install on Windows (PowerShell), Ubuntu, and macOS (Intel + Apple Silicon)." icon="Layers" />
+  <Card title="Safe by default" description="A safety gate blocks destructive intent (rm -rf /, format, dd if=, shutdown, ...) before any process is spawned." icon="Lock" />
+</Cards>
+
+## 60-second tour
+
+```bash
+# 1. Install (any OS, Node 20+)
+npm install -g sui-commando@beta
+
+# 2. Configure your LLM provider once
+cmdo init
+
+# 3. Talk to the Sui ecosystem
+cmdo "create new sui address"
+cmdo "give me testnet sui from faucet"
+cmdo "build my move package"
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+```
+
+That's the whole loop. No `sui client switch --env testnet`, no manual `walrus get-wal`, no chasing the right `site-builder deploy` flags — Commando plans the command, validates it against the live skill contract, and streams the output back.
+
+## How it works
+
+```mermaid
+flowchart LR
+    U[User Prompt] --> R[Intent Router]
+    R --> S[Skill Loader\nAGENT.md]
+    R --> L[LLM Planner]
+    S --> L
+    L --> G[Safety Gate]
+    G --> E[Execution Engine]
+    E --> B[sui / walrus / site-builder]
+    B --> O[Streamed Output + Hints]
+```
+
+1. **Router** picks the target binary from explicit flags (`--sui`, `--walrus`, `--site-builder`) or keyword inference.
+2. **Skill loader** trims `~/.commando/skills/AGENT.md` (auto-generated from `--help`) to only the relevant tool.
+3. **LLM planner** (OpenAI or OpenRouter) emits structured `{ binary, args }`. The output is parsed defensively and the command path is validated against the allowlist; hallucinated subcommands trigger a retry instead of being executed.
+4. **Safety gate** rejects destructive patterns on every supported OS.
+5. **Execution engine** spawns the real binary, streams stdout/stderr live, and matches the stderr tail against well-known failure patterns to print actionable hints (e.g., "missing WAL coins → try `cmdo \"get wal\"`").
+
+Read the full design in [Architecture](/documentation/guides/architecture).
+
+## What ships in v0.2.4-beta
+
+| Area | Status |
+|---|---|
+| Windows x86_64 | Stable |
+| Linux x86_64 | Stable |
+| Linux aarch64 | Stable (site-builder skipped — no upstream build) |
+| macOS x86_64 / arm64 | Stable |
+| Auto-bootstrap Sui wallet | Yes (`~/.sui/sui_config/client.yaml`) |
+| Auto-bootstrap Walrus config | Yes (`~/.config/walrus/client_config.yaml`, testnet default) |
+| LLM providers | OpenAI, OpenRouter |
+| Mock planner | `CMDO_LLM_MOCK=1` for offline demos |
+| Secret-free tarball | Yes — operator credentials read from env vars only |
+
+## Where to go next
+
+<Cards>
+  <Card title="Quickstart" description="Install, configure, and run your first prompt in under 5 minutes." href="/documentation/quickstart" icon="Rocket" />
+  <Card title="Installation" description="Cross-platform install details, env vars, and the optional R2 mirror." href="/documentation/guides/installation" icon="Download" />
+  <Card title="Architecture" description="Components, data flow, and the safety model in depth." href="/documentation/guides/architecture" icon="Layers" />
+  <Card title="LLM Setup" description="Pick a provider, set a key, choose a model." href="/documentation/guides/llm-setup" icon="Sparkles" />
+  <Card title="Sui Cookbook" description="Copy-paste prompts for wallets, faucet, build, publish." href="/documentation/examples/sui-flows" icon="BookOpen" />
+  <Card title="Walrus Sites" description="Deploy a static site to Walrus Sites end-to-end." href="/documentation/examples/walrus-sites" icon="Cloud" />
+  <Card title="CLI Reference" description="Every cmdo subcommand and flag." href="/documentation/reference/cli" icon="Terminal" />
+  <Card title="Troubleshooting" description="Common errors and the hints Commando prints for them." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
+
+---
+
+# Quickstart (/quickstart)
+
+# Quickstart
+
+By the end of this page you'll have Commando installed, an LLM provider configured, a Sui testnet wallet, and a successful first prompt — on Windows, Linux, or macOS.
+
+## Prerequisites
+
+- **Node.js 20+** (Node 18 works but is not recommended).
+- An OpenAI API key **or** an OpenRouter API key. (OpenRouter has free tiers — see [LLM Setup](/documentation/guides/llm-setup).)
+- ~900 MB free disk space for the upstream `sui` / `walrus` / `site-builder` binaries.
+
+<Callout type="info">
+  Commando is currently published under the `beta` dist-tag. Always install with `@beta` until 1.0 ships.
+</Callout>
+
+## 1. Install Commando
+
+<Tabs items={["npm", "Skip auto-bootstrap (CI)"]}>
+  <Tab value="npm">
+    ```bash
+    npm install -g sui-commando@beta
+    ```
+
+    The `postinstall` hook detects your OS + arch, downloads the upstream binaries from GitHub releases into `~/.commando/bin/` (or `%USERPROFILE%\.commando\bin\` on Windows), patches your shell PATH, and bootstraps the Sui wallet and Walrus client config.
+  </Tab>
+  <Tab value="Skip auto-bootstrap (CI)">
+    For CI / Docker builds where you don't want a 900 MB download during `npm install`:
+
+    ```bash
+    CMDO_SKIP_BOOTSTRAP=1 npm install -g sui-commando@beta
+    cmdo bootstrap   # run later when ready
+    ```
+  </Tab>
+</Tabs>
+
+<Callout type="warn">
+  **Open a new terminal** after install so the updated PATH takes effect. On Linux/macOS you may need `source ~/.bashrc` or `source ~/.zshrc`.
+</Callout>
+
+Verify the install:
+
+```bash
+cmdo --version    # commando 0.2.4-beta
+cmdo doctor
+```
+
+`cmdo doctor` should print your platform, the path to `~/.commando/bin`, a green check that the bin folder is on PATH, and `present (+x)` (Unix) or `present` / `sha256 ok` (Windows) for each binary.
+
+## 2. Configure an LLM provider
+
+```bash
+cmdo init
+```
+
+This is interactive: pick `openai` or `openrouter`, paste an API key, and choose a model. Defaults are sane (`gpt-4o-mini` for OpenAI, `z-ai/glm-4.5-air:free` for OpenRouter).
+
+<Callout type="info">
+  Prefer environment variables? Skip `cmdo init` and just export `OPENAI_API_KEY` or `OPENROUTER_API_KEY`. See [LLM Setup](/documentation/guides/llm-setup) for the full picker logic.
+</Callout>
+
+## 3. Get a Sui testnet wallet + gas
+
+```bash
+cmdo "create new sui address"
+cmdo "give me testnet sui from faucet"
+sui client gas
+```
+
+The first command initializes the Sui keystore (`~/.sui/sui_config/`) if it does not already exist; the faucet prompt hits the public testnet faucet directly so you do not have to remember the URL.
+
+## 4. Run your first real command
+
+<Steps>
+  <Step>
+    ### Build a Move package
+
+    From any folder containing a `Move.toml`:
+
+    ```bash
+    cmdo "build my move package"
+    ```
+
+    Commando will plan `sui move build` (not `sui client publish` — the prompt rules distinguish the verbs explicitly) and stream the compiler output.
+  </Step>
+  <Step>
+    ### Deploy to Walrus Sites
+
+    From a folder containing a built static site (e.g. `./dist`):
+
+    ```bash
+    cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+    ```
+
+    The planner will emit `site-builder deploy --epochs 1 ./dist`. If you do not yet have WAL or SUI coins on testnet, the runtime hint will tell you exactly which `cmdo "..."` to run next.
+  </Step>
+  <Step>
+    ### Try Walrus directly
+
+    ```bash
+    cmdo "show walrus info" --walrus
+    cmdo "get wal" --walrus
+    ```
+  </Step>
+</Steps>
+
+## 5. Demo / offline mode
+
+No internet for the LLM call? Set the mock planner:
+
+```bash
+CMDO_LLM_MOCK=1 cmdo "show sui client active address" --sui
+```
+
+Useful for hackathon demos where the network is unreliable. The mock covers the most common Sui / Walrus / Site-builder verbs.
+
+## CLI summary
+
+| Command | Purpose |
+|---|---|
+| `cmdo <prompt>` | Default — plan and execute a natural-language request |
+| `cmdo init` | Configure LLM provider, key, and model |
+| `cmdo doctor` | Print environment status and verify binaries |
+| `cmdo bootstrap` | Re-run the install (download binaries, patch PATH, regen skills) — idempotent |
+| `cmdo update-skills` | Regenerate `~/.commando/skills/AGENT.md` from the current binaries |
+| `cmdo --version` | Print the installed version |
+
+Routing flags: `--sui`, `--walrus`, `--site-builder` force the target binary and skip the keyword inference step.
+
+## Next steps
+
+<Cards>
+  <Card title="Installation deep dive" description="Cross-platform details, PATH patching, optional R2 mirror." href="/documentation/guides/installation" icon="Download" />
+  <Card title="LLM Setup" description="OpenAI vs OpenRouter, models, and env vars." href="/documentation/guides/llm-setup" icon="Sparkles" />
+  <Card title="Sui Cookbook" description="Wallet, faucet, build, publish, gas - every common prompt." href="/documentation/examples/sui-flows" icon="BookOpen" />
+  <Card title="Walrus Sites" description="End-to-end static site deploy walkthrough." href="/documentation/examples/walrus-sites" icon="Cloud" />
+  <Card title="Troubleshooting" description="What the runtime hints mean and how to fix them." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
+
+---
+
+# Installation (/guides/installation)
+
+# Installation
+
+Commando is shipped as a single npm package, `sui-commando`, that runs on Windows, Linux, and macOS. The `postinstall` hook handles binary downloads, PATH patching, and external CLI config bootstrap.
+
+## Supported platforms
+
+| OS | Arch | `sui` | `walrus` | `site-builder` |
+|---|---|---|---|---|
+| Windows | x86_64 | Yes | Yes | Yes |
+| Linux | x86_64 | Yes | Yes | Yes |
+| Linux | aarch64 | Yes | Yes | **Skipped** (no upstream build) |
+| macOS | x86_64 (Intel) | Yes | Yes | Yes |
+| macOS | arm64 (Apple Silicon) | Yes | Yes | Yes |
+
+<Callout type="warn">
+  On `linux-aarch64` the upstream `MystenLabs/walrus-sites` release does not ship a binary, so `site-builder` is skipped gracefully. Walrus Sites prompts will fail with a clear message; deploy from an x86_64 machine instead.
+</Callout>
+
+## Install
+
+```bash
+npm install -g sui-commando@beta
+```
+
+That's it. The hook will:
+
+1. Detect OS + arch (`bootstrap/platform.ts`).
+2. Download `.tgz` archives directly from the upstream Mysten Labs GitHub releases.
+3. Extract them with the system `tar` and set the executable bit on Unix.
+4. Patch your shell PATH (Windows registry; `~/.bashrc` / `~/.zshrc` / `~/.bash_profile` / `~/.profile` on Unix).
+5. Bootstrap the Sui wallet (`~/.sui/sui_config/client.yaml`) and Walrus client config (`~/.config/walrus/client_config.yaml`, testnet default).
+6. Generate `~/.commando/skills/AGENT.md` from each binary's `--help` output.
+
+## Verify
+
+```bash
+cmdo doctor
+```
+
+Expected output (Linux example):
+
+```text
+node: v20.x
+platform: linux-x86_64
+cpu: <model>
+install root: /root/.commando
+bin dir: /root/.commando/bin [ok]
+skills file: /root/.commando/skills/AGENT.md [ok]
+bin on PATH: yes
+sui: present (+x)
+walrus: present (+x)
+site-builder: present (+x)
+LLM provider: OpenAI (model=gpt-4o-mini) - key configured
+doctor: all checks passed.
+```
+
+If `bin on PATH` is `NO`, open a new terminal (or `source ~/.bashrc` / `source ~/.zshrc`).
+
+## Where things live
+
+<Files>
+  <Folder name="~/.commando" defaultOpen>
+    <Folder name="bin" defaultOpen>
+      <File name="sui (or sui.exe)" />
+      <File name="walrus (or walrus.exe)" />
+      <File name="site-builder (or site-builder.exe)" />
+    </Folder>
+    <Folder name="skills">
+      <File name="AGENT.md" />
+    </Folder>
+    <Folder name="sandbox">
+      <Folder name="default" />
+    </Folder>
+    <Folder name="cache" />
+  </Folder>
+  <Folder name="~/.sui/sui_config">
+    <File name="client.yaml" />
+    <File name="sui.keystore" />
+  </Folder>
+  <Folder name="~/.config/walrus">
+    <File name="client_config.yaml" />
+    <File name="sites-config.yaml (manual, see below)" />
+  </Folder>
+</Files>
+
+<Callout type="info">
+  `~/.config/walrus/sites-config.yaml` is required by `site-builder` for Walrus Sites deploys but is **not** auto-bootstrapped in 0.2.4-beta. If you hit "could not find a valid sites configuration file", download the upstream sample and set `default_context: testnet`. Tracked for auto-bootstrap in a follow-up release.
+</Callout>
+
+## Re-running the install
+
+`cmdo bootstrap` is idempotent — it skips files that are already present and verified. Use it to:
+
+- Recover from a partial install (network drop mid-download).
+- Pick up a new binary version after upgrading the npm package.
+- Re-patch PATH after a fresh shell config.
+
+```bash
+cmdo bootstrap
+```
+
+To force a full re-download, delete `~/.commando/bin/` first.
+
+## Skipping the postinstall (CI / Docker)
+
+The 900 MB download is unwelcome in CI pipelines. Skip it with:
+
+```bash
+CMDO_SKIP_BOOTSTRAP=1 npm install -g sui-commando@beta
+```
+
+Then run `cmdo bootstrap` manually when (and where) you actually need the binaries — e.g., in a separate stage or only on the production runner.
+
+Any non-empty value other than `0` or `false` enables the skip.
+
+## Tuning the downloader
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `CMDO_DOWNLOAD_CONCURRENCY` | `3` | Parallel downloads. Lower on flaky networks. |
+| `CMDO_DOWNLOAD_IDLE_MS` | `120000` | Per-chunk idle timeout (ms). Increase on slow links. |
+| `CMDO_DOWNLOAD_RETRIES` | `3` | Attempts per file before giving up. |
+
+The downloader supports HTTP Range resume, so a half-finished `.part` file is reused on the next attempt.
+
+## Optional: R2 manifest mirror (advanced)
+
+By default, every install pulls binaries straight from upstream GitHub releases — no operator-owned mirror is involved. For CI mirrors, air-gapped enterprise installs, or future paid tiers we keep an opt-in R2 manifest path that adds **per-binary SHA256 provenance**.
+
+Enable it by setting **both** of these env vars (Windows only — the legacy R2 manifest only ever covered Windows):
+
+```bash
+export CMDO_MANIFEST_URL="https://your-r2-worker.example.com/object?key=manifests/commando-x.y.z.json"
+export CMDO_R2_TOKEN="<bearer-token-the-worker-accepts>"
+```
+
+When both are present, `npm install -g sui-commando@beta` fetches the manifest, verifies SHA256 per binary, and installs from there. When either is missing, the install transparently falls back to GitHub-direct.
+
+<Callout type="warn">
+  **No secrets are shipped inside the npm tarball.** If a token previously lived in `src/config/defaults.ts`, it has been removed and rotated. If you are re-using an old worker, generate a fresh secret and update `CMDO_R2_TOKEN` accordingly.
+</Callout>
+
+## Uninstall
+
+```bash
+npm uninstall -g sui-commando
+rm -rf ~/.commando        # binaries, skills, sandbox
+# Optional - if you don't use these CLIs elsewhere:
+rm -rf ~/.sui ~/.config/walrus
+```
+
+On Windows, also remove `%USERPROFILE%\.commando` and the PATH entry that the installer added (the registry edit is reversed on next `cmdo bootstrap` if you reinstall later).
+
+## Next
+
+<Cards>
+  <Card title="LLM Setup" description="Pick a provider, set a key, choose a model." href="/documentation/guides/llm-setup" icon="Sparkles" />
+  <Card title="Architecture" description="What postinstall actually does, in detail." href="/documentation/guides/architecture" icon="Layers" />
+  <Card title="Troubleshooting" description="Install errors and how to fix them." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
+
+---
+
+# Architecture (/guides/architecture)
+
+# Architecture
+
+Commando is a thin orchestration layer between human intent and three upstream Mysten Labs CLIs. Everything runs locally; nothing in the request path requires a Commando-owned server.
+
+## Component diagram
+
+```mermaid
+flowchart LR
+    U[User Prompt] --> C[cmdo CLI entrypoint]
+    C --> R[Intent Router]
+    R --> S[Skill Loader\nAGENT.md]
+    R --> L[LLM Planner]
+    S --> L
+    L --> V[Plan Validator\nallowlist + flag check]
+    V --> G[Safety Gate]
+    G --> E[Execution Engine]
+    E --> B[sui / walrus / site-builder]
+    B --> O[Streamed Output]
+    B --> H[Stderr-tail Hint Matcher]
+    H --> O
+```
+
+## 1. Installer & Bootstrap
+
+Triggered by npm `postinstall` (also runnable as `cmdo bootstrap`). Lives in `src/bootstrap/`.
+
+- **`platform.ts`** — detects host OS (`windows` / `linux` / `macos`) and arch (`x86_64` / `aarch64` / `arm64`); throws on unsupported triples with a clear message.
+- **`download-gh.ts`** — direct GitHub release downloads; system `tar` extraction; chmod +x on Unix.
+- **`download.ts` + `r2Client.ts`** — opt-in R2 manifest path (Windows only, gated by `CMDO_MANIFEST_URL` + `CMDO_R2_TOKEN`); adds SHA256 provenance per binary.
+- **`addToPath.ts`** — Windows registry edit; appends to `~/.bashrc` / `~/.zshrc` / `~/.bash_profile` / `~/.profile` on Unix with an idempotence marker.
+- **`configs.ts`** — auto-bootstraps `~/.sui/sui_config/client.yaml` (non-interactive `sui client active-address` piped with `y\n\n0\n`) and fetches `~/.config/walrus/client_config.yaml` from the Mysten docs (testnet default).
+
+## 2. Skill Generator
+
+`src/skills/generator.ts` shells out to each binary with `--help` (and one level of subcommand `--help`), parses the output into normalized markdown sections, and writes `~/.commando/skills/AGENT.md`. The generator is platform-aware — it resolves `sui` vs `sui.exe` via `toolFilename(base)` so the same logic works on Windows and Unix.
+
+`AGENT.md` is the **single source of truth** for the LLM planner. Re-run `cmdo update-skills` after upgrading any binary.
+
+## 3. Intent Router
+
+`src/router/`. Two strategies, in order:
+
+1. **Hard override** — `--sui`, `--walrus`, or `--site-builder` flag wins immediately.
+2. **Keyword inference** — score-based matching against tool-specific verbs and nouns (e.g. "publish", "move", "address" → sui; "blob", "wal" → walrus; "deploy", "site", "epochs" → site-builder).
+
+The router also performs **scope reduction**: only the relevant section of `AGENT.md` is sent to the LLM, keeping the prompt small and reducing the hallucination surface.
+
+## 4. LLM Planner
+
+`src/llm/planner.ts`. Calls OpenAI or OpenRouter with a hard-rules system prompt:
+
+- Output **must** be a single JSON object `{ binary, args }`.
+- The `binary` value is normalized against an allowlist (`sui` / `walrus` / `site-builder`, with the platform-correct `.exe` suffix on Windows).
+- Positional arguments (directories, object IDs, hashes) are emitted as bare strings — never as flags.
+- Verbs are disambiguated explicitly (`build` ≠ `test` ≠ `publish`; `deploy <DIRECTORY>` requires the directory).
+
+### Defensive parsing
+
+`tryParseJson` extracts the first balanced JSON object from the raw LLM output, even when the model wraps it in prose, markdown fences, or smart quotes. If the model returns nothing usable after the configured retries, the call fails with a clear "LLM did not return valid JSON" error.
+
+### Plan validation
+
+`validatePlan(plan, ctx)` checks:
+
+1. `binary` is in the allowlist.
+2. The leading non-flag tokens of `args` form a command path that exists in `ctx.allowedCommands` (built from `AGENT.md`).
+3. Every flag in `args` exists in the skill contract for that command path.
+
+A failed check triggers a retry with a tighter hint instead of forwarding a hallucinated command. After the final retry, the call surfaces the validation error.
+
+### Mock mode
+
+`CMDO_LLM_MOCK=1` swaps in a deterministic regex-driven planner that covers the most common Sui / Walrus / Site-builder verbs. Useful for hackathon demos with unreliable network and for unit tests.
+
+## 5. Safety Gate
+
+`src/safety/gate.ts`. Runs **twice**:
+
+- **Pre-LLM** — pattern-matches the raw user prompt against `PROMPT_PATTERNS` (cross-platform destructive intent: `del C:\\`, `rm -rf /`, `format`, `mkfs`, `dd if=`, `shutdown`, `reboot`, ...). Blocks before any tokens are sent to a third party.
+- **Post-LLM** — pattern-matches the planned `args` array against `ARG_PATTERNS`. Catches cases where the LLM re-introduces destructive arguments despite a benign-looking prompt.
+
+Plus the structural allowlist: `binary` must resolve to a file inside `~/.commando/bin/`.
+
+## 6. Execution Engine
+
+`src/exec/spawner.ts`. Uses `child_process.spawn` with explicit argument arrays — no shell interpolation, so quoting is never an issue.
+
+- `stdio: ['inherit', 'inherit', 'pipe']` — stdin and stdout pass through directly to the user's terminal; stderr is teed to `process.stderr` (live output) **and** captured into a small ring buffer.
+- On non-zero exit, the ring buffer is matched against `FAILURE_HINTS`. Examples:
+  - `could not find a valid Walrus configuration file` → "run `cmdo bootstrap` to recreate the client config".
+  - `could not find WAL coins with sufficient balance` → "run `cmdo \"get wal\"` (and verify your context is testnet)".
+  - `could not find SUI coins with sufficient balance` → "run `cmdo \"give me testnet sui from faucet\"`".
+
+This keeps the user out of "stare at a stack trace" mode.
+
+## Data & state
+
+| Path | Owner | Purpose |
+|---|---|---|
+| `~/.commando/bin/` | Commando | Downloaded upstream binaries |
+| `~/.commando/skills/AGENT.md` | Commando | Generated command/flag contract for the LLM |
+| `~/.commando/sandbox/default/` | Commando | Default sandbox profile (configs, keystore, projects) |
+| `~/.commando/cache/` | Commando | Temporary downloads, manifests, etc. |
+| `~/.sui/sui_config/` | Sui CLI | Wallet, keystore, client config |
+| `~/.config/walrus/client_config.yaml` | Walrus CLI | Walrus testnet/mainnet endpoints |
+| `~/.config/walrus/sites-config.yaml` | Site-builder | Walrus Sites contexts (manual in 0.2.4-beta) |
+
+No server-side user state in MVP.
+
+## Security posture (v0.2.4-beta)
+
+- **No secrets in the npm tarball.** `src/config/defaults.ts` is treated as semi-public; the previous hardcoded R2 manifest auth key was removed and rotated. Operator credentials (R2 token, LLM API keys) are read from env vars only.
+- Local key storage only; no key exfiltration feature.
+- Minimal permission model with local file boundaries.
+- Pre-LLM safety gate keeps destructive intent out of third-party prompts.
+- Post-LLM safety gate + allowlist keeps destructive args off `spawn`.
+- Optional command audit log (stretch, off by default).
+
+## Reliability choices
+
+- Direct upstream downloads remove the operator-owned mirror as a single point of failure.
+- Single sandbox profile keeps profile-management bugs out of MVP.
+- Single-step execution per prompt — no multi-step planning loop.
+- Idempotent recovery commands: `cmdo bootstrap` and `cmdo update-skills`.
+
+## Post-MVP
+
+- Multiple sandbox profiles + sharing model.
+- Signed command templates and a richer policy engine.
+- Provider routing/fallback for LLM calls.
+- Optional signed manifest distribution (rebuild the R2 path with rotated keys + per-asset signatures).
+
+## Next
+
+<Cards>
+  <Card title="Safety" description="What the safety gate blocks and how to extend the patterns." href="/documentation/guides/safety" icon="Lock" />
+  <Card title="LLM Setup" description="Provider choice and model defaults." href="/documentation/guides/llm-setup" icon="Sparkles" />
+  <Card title="CLI Reference" description="Every cmdo subcommand and flag." href="/documentation/reference/cli" icon="Terminal" />
+</Cards>
+
+---
+
+# LLM Setup (/guides/llm-setup)
+
+# LLM Setup
+
+Commando uses an LLM to plan each command. You can use **OpenAI**, **OpenRouter**, or skip the LLM entirely with the deterministic **mock planner**.
+
+## Quick decision
+
+<Cards>
+  <Card title="OpenAI" description="Best plan quality. Pay-as-you-go. Good default: gpt-4o-mini (cheap + fast)." icon="Sparkles" />
+  <Card title="OpenRouter" description="Single API for many models, including free tiers. Good default: z-ai/glm-4.5-air:free." icon="Layers" />
+  <Card title="Mock planner" description="No LLM call. Deterministic regex-based planning for the most common verbs. Useful for offline demos and CI." icon="ShieldCheck" />
+</Cards>
+
+## Interactive setup
+
+```bash
+cmdo init
+```
+
+This prompts you for:
+
+1. Provider — `openai` or `openrouter`.
+2. API key — pasted at the prompt, stored in `~/.commando/config.json`.
+3. Model — picked from a curated dropdown.
+
+Re-run `cmdo init` any time to switch providers or models.
+
+## Manual / env-only setup
+
+If you'd rather not store the key on disk, set env vars and skip `cmdo init`. Commando looks for env vars **before** falling back to `~/.commando/config.json`.
+
+<Tabs items={["OpenAI", "OpenRouter"]}>
+  <Tab value="OpenAI">
+    ```bash
+    export OPENAI_API_KEY=sk-...
+    export OPENAI_MODEL=gpt-4o-mini   # optional, defaults to gpt-4o-mini
+    ```
+  </Tab>
+  <Tab value="OpenRouter">
+    ```bash
+    export OPENROUTER_API_KEY=sk-or-...
+    export OPENROUTER_MODEL=z-ai/glm-4.5-air:free   # optional
+    ```
+  </Tab>
+</Tabs>
+
+On Windows PowerShell:
+
+```powershell
+$env:OPENAI_API_KEY = "sk-..."
+$env:OPENAI_MODEL   = "gpt-4o-mini"
+```
+
+## Curated OpenAI models
+
+The `cmdo init` picker keeps the list tight (one screen). Power users can override via `OPENAI_MODEL`.
+
+| ID | Note |
+|---|---|
+| `gpt-4o` | Flagship, best for complex plans |
+| `gpt-4o-mini` | Cheap + fast, good default |
+| `gpt-4.1` | Next-gen flagship |
+| `gpt-4.1-mini` | Smaller 4.1 tier |
+| `o3-mini` | Reasoning model |
+| `o4-mini` | Newer reasoning model |
+
+**Default:** `gpt-4o-mini`.
+
+## OpenRouter
+
+OpenRouter exposes a single OpenAI-compatible endpoint that proxies to dozens of providers. The default model `z-ai/glm-4.5-air:free` works without spend, which makes it ideal for first-run testing.
+
+**Default:** `z-ai/glm-4.5-air:free`.
+
+Override with `OPENROUTER_MODEL` (e.g. `anthropic/claude-3.5-sonnet`, `openai/gpt-4o-mini`, `meta-llama/llama-3.1-70b-instruct`).
+
+## How Commando uses the LLM
+
+The planner sends a hard-rules system prompt plus a **scoped** slice of `AGENT.md` (only the section for the routed binary). It expects a single JSON object back:
+
+```json
+{
+  "binary": "sui",
+  "args": ["client", "active-address"]
+}
+```
+
+Output is parsed defensively (markdown fences, smart quotes, and surrounding prose are all tolerated). The plan is then validated against the allowlist built from `AGENT.md`:
+
+- `binary` must be one of `sui` / `walrus` / `site-builder` (with the platform-correct suffix).
+- The leading non-flag tokens of `args` must form a real command path.
+- Every flag must exist in the skill contract for that command path.
+
+A failed validation triggers a retry with a tighter hint instead of executing a hallucinated command.
+
+<Callout type="info">
+  Want to see the full system prompt and validation logic? Read `src/llm/planner.ts` in the [Commando repo](https://github.com/MystenLabs/sui-commando).
+</Callout>
+
+## Offline / demo mode
+
+Set `CMDO_LLM_MOCK=1` to bypass the LLM entirely:
+
+```bash
+CMDO_LLM_MOCK=1 cmdo "show sui client active address" --sui
+```
+
+The mock covers:
+
+- **Sui** — `client active-address`, `client active-env`, `client new-address`, `client gas`, `client switch --env`, `client publish`, `move build`, `move test`.
+- **Walrus** — `info`, `list-blobs`, `get-wal`, basic store/read scaffolding.
+- **Site-builder** — `deploy <DIRECTORY> --epochs <N>`, `sitemap`, `update`.
+
+Use it for hackathon demos, CI smoke tests, or to rule out the LLM as a source of bugs while debugging.
+
+## Cost notes
+
+- `gpt-4o-mini` typically costs less than $0.001 per planning call (the prompts are small — usually under 2 KB).
+- OpenRouter free tiers have rate limits; switch to a paid model if you hit them during a demo.
+- The planner makes **one** LLM call per `cmdo` invocation under happy path; one extra call per validation retry (max 2 retries by default).
+
+## Next
+
+<Cards>
+  <Card title="Safety" description="What gets blocked before reaching the LLM, and what gets blocked after." href="/documentation/guides/safety" icon="Lock" />
+  <Card title="Sui Cookbook" description="Copy-paste prompts for the most common Sui flows." href="/documentation/examples/sui-flows" icon="BookOpen" />
+  <Card title="Env Vars" description="Every CMDO_*, OPENAI_*, OPENROUTER_* variable in one place." href="/documentation/reference/env-vars" icon="Settings" />
+</Cards>
+
+---
+
+# Safety (/guides/safety)
+
+# Safety
+
+Commando assumes the user is a developer, not an adversary — but it also assumes the LLM occasionally produces nonsense. The safety gate runs **twice** to keep both human typos and model hallucinations out of `spawn`.
+
+## The two layers
+
+```mermaid
+flowchart LR
+    P[User Prompt] --> P1{Pre-LLM\nPROMPT_PATTERNS}
+    P1 -- match --> X1[Block + reason]
+    P1 -- ok --> L[LLM Planner]
+    L --> A[Planned args]
+    A --> P2{Post-LLM\nARG_PATTERNS}
+    P2 -- match --> X2[Block + reason]
+    P2 -- ok --> AL{Allowlist\n binary in ~/.commando/bin}
+    AL -- fail --> X3[Block]
+    AL -- ok --> E[Execute]
+```
+
+### Layer 1 — Pre-LLM prompt screen
+
+`PROMPT_PATTERNS` matches the **raw user input** before it reaches a third-party API. Catches things like:
+
+- `delete everything in C drive`, `format C:`, `del C:\\`
+- `rm -rf /`, `rm -rf ~`, `rm -rf ~/.ssh`
+- `mkfs`, `dd if=/dev/zero`, `:(){ :|:& };:` (fork bomb)
+- `shutdown /s`, `shutdown -h now`, `reboot`
+- Prompts attempting to exfiltrate keys (`cat ~/.ssh/id_rsa`, `print my private key`)
+
+Blocked prompts never leave your machine.
+
+### Layer 2 — Post-LLM arg screen
+
+`ARG_PATTERNS` matches the LLM-emitted `args` array. Catches the case where a benign-looking prompt is misinterpreted into a destructive command, or where a prompt-injection payload smuggled past Layer 1 emerges as an explicit destructive arg.
+
+Both layers share most patterns but use different anchoring (free text vs. tokenized argv).
+
+### Structural allowlist
+
+Independent of the pattern matchers:
+
+- `binary` must resolve to a real file inside `~/.commando/bin/`.
+- The command path (leading non-flag tokens) must be in the allowlist generated from `~/.commando/skills/AGENT.md`.
+- Every flag must exist in the skill contract for that command path.
+
+Any failure short-circuits before `spawn`.
+
+## What you'll see when it fires
+
+```text
+$ cmdo "delete everything in C drive"
+[safety] Prompt blocked by safety policy
+[safety] reason: matches PROMPT_PATTERNS rule "destructive intent: delete everything in <drive>"
+[safety] hint: Commando does not execute prompts that look like destructive system actions.
+         If you really meant to do this, run the underlying command directly.
+```
+
+Exit code: `non-zero`. No LLM call is made for Layer 1 blocks; no `spawn` is made for Layer 2 blocks.
+
+## Extending the patterns
+
+The patterns live in `src/safety/gate.ts`:
+
+```ts
+// Pseudocode — see the real file for the full list.
+export const PROMPT_PATTERNS = [
+  { re: /\b(rm|del)\s+-?r?f?\s+(\/|c:\\)/i, reason: 'destructive intent: ...' },
+  { re: /\bformat\s+[a-z]:/i,               reason: '...' },
+  // ...
+];
+
+export const ARG_PATTERNS = [
+  { re: /^--?force(-?yes)?$/i,              reason: 'forced destructive flag' },
+  // ...
+];
+```
+
+To add a rule:
+
+1. Add an entry to `PROMPT_PATTERNS` and/or `ARG_PATTERNS` with a clear `reason` (it's surfaced to the user).
+2. Add a unit test in `tests/safety/` covering both the positive case (must block) and a negative case (must not over-block).
+3. Run `npm test` to make sure existing prompts still plan as before.
+
+## What the gate does **not** do
+
+- It does **not** rate-limit or throttle. If an LLM returns the same wrong plan 100 times, you'll get 100 retries (capped at the validator's max retries).
+- It does **not** sandbox the spawned process. `sui` and `walrus` run with your user's full privileges. Use a dedicated user / container if that matters.
+- It does **not** scan binary outputs for secrets. Streamed stdout/stderr go to your terminal verbatim.
+- It does **not** parse Move source code for malicious constructs. The gate is at the CLI layer, not the application layer.
+
+## Disabling (don't)
+
+There is no kill switch for the safety gate in 0.2.4-beta — the worst case is a noisy false positive that you can route around by running the underlying CLI directly. If you have a legitimate reason for a `cmdo --i-know-what-im-doing` mode, file an issue with your use case.
+
+## Related
+
+<Cards>
+  <Card title="Architecture" description="Where the gate sits in the request pipeline." href="/documentation/guides/architecture" icon="Layers" />
+  <Card title="Troubleshooting" description="How to tell a safety block from a runtime failure." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
+
+---
+
+# Troubleshooting (/guides/troubleshooting)
+
+# Troubleshooting
+
+Commando tries to fail loudly with a hint, not silently with a stack trace. Each entry below shows the **error you see**, the **root cause**, and the **fix**.
+
+## Install / bootstrap
+
+### `bin on PATH: NO` after install
+
+**Cause:** Your shell session was started before the installer patched `~/.bashrc` / `~/.zshrc` / Windows registry.
+
+**Fix:** Open a new terminal. On Linux/macOS you can also `source ~/.bashrc` (or `~/.zshrc`).
+
+---
+
+### `cmdo: command not found`
+
+**Cause:** The `npm install -g sui-commando@beta` step failed silently, or the global npm bin directory is not on your PATH.
+
+**Fix:**
+
+```bash
+npm bin -g                    # show the global bin path
+echo $PATH | tr ':' '\n'      # check it is there
+npm install -g sui-commando@beta --foreground-scripts   # retry with visible output
+```
+
+---
+
+### `bootstrap failed but install continues`
+
+**Cause:** Network drop, firewall, or upstream GitHub release URL changed.
+
+**Fix:** `cmdo bootstrap` is idempotent and supports HTTP Range resume, so re-running it is cheap:
+
+```bash
+cmdo bootstrap
+```
+
+If the URL changed (rare; we pin tags), you'll need a Commando upgrade: `npm install -g sui-commando@beta`.
+
+---
+
+### `site-builder: missing` on Linux ARM
+
+**Cause:** Upstream `MystenLabs/walrus-sites` does not ship a `linux-aarch64` build. Commando skips it on purpose.
+
+**Fix:** Run Walrus Sites prompts on an x86_64 machine. Other Walrus operations (info, store, read) work fine on ARM.
+
+## Sui
+
+### `could not find SUI coins with sufficient balance`
+
+**Cause:** Wallet has less testnet SUI than the operation requires (typically ≥ 0.5 SUI for `site-builder deploy`).
+
+**Fix:**
+
+```bash
+cmdo "give me testnet sui from faucet"
+sui client gas    # confirm balance increased
+```
+
+If the faucet times out, wait 5-10s and retry; the public testnet faucet is rate-limited per address.
+
+---
+
+### `spawn /root/.commando/bin/sui.exe ENOENT`
+
+**Cause:** A pre-0.2.3-beta build hard-coded `sui.exe` on Linux. Upgrade.
+
+**Fix:**
+
+```bash
+npm install -g sui-commando@beta
+cmdo --version    # should be ≥ 0.2.4-beta
+```
+
+---
+
+### `cmdo "build my move package"` runs `sui client publish`
+
+**Cause:** Pre-0.2.3-beta planner conflated build/test/publish.
+
+**Fix:** Upgrade to 0.2.4-beta — the system prompt now disambiguates the verbs explicitly and the validator rejects the wrong path.
+
+## Walrus
+
+### `Error: could not find a valid Walrus configuration file`
+
+**Cause:** `~/.config/walrus/client_config.yaml` is missing. Either bootstrap was skipped (`CMDO_SKIP_BOOTSTRAP=1`) or the auto-fetch failed.
+
+**Fix:**
+
+```bash
+cmdo bootstrap
+# or, manually:
+mkdir -p ~/.config/walrus
+curl -L -o ~/.config/walrus/client_config.yaml https://docs.wal.app/setup/client_config.yaml
+```
+
+---
+
+### `Error: could not find WAL coins with sufficient balance`
+
+**Cause:** Either you have no WAL coins, or your Walrus context is `mainnet` but your coins are on `testnet` (or vice versa).
+
+**Fix:**
+
+```bash
+# 1. Check active context
+grep '^default_context' ~/.config/walrus/client_config.yaml
+# AND, if it exists:
+grep '^default_context' ~/.config/walrus/sites-config.yaml
+
+# 2. If needed, set both to testnet
+sed -i 's/^default_context: mainnet$/default_context: testnet/' ~/.config/walrus/sites-config.yaml
+
+# 3. Get WAL
+cmdo "get wal" --walrus
+```
+
+The runtime hint that prints this error includes the same checklist.
+
+## Site-builder
+
+### `Error: could not find a valid sites configuration file`
+
+**Cause:** `~/.config/walrus/sites-config.yaml` is missing. **Not** auto-bootstrapped in 0.2.4-beta (tracked for a follow-up).
+
+**Fix:**
+
+```bash
+mkdir -p ~/.config/walrus
+curl -L -o ~/.config/walrus/sites-config.yaml \
+  https://raw.githubusercontent.com/MystenLabs/walrus-sites/main/sites-config.yaml
+# Then make sure the context matches your wallet:
+sed -i 's/^default_context: mainnet$/default_context: testnet/' ~/.config/walrus/sites-config.yaml
+```
+
+---
+
+### `Error: missing <DIRECTORY>` from `site-builder deploy`
+
+**Cause:** The LLM omitted the positional directory argument.
+
+**Fix:** Be explicit in the prompt:
+
+```bash
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+# or directly:
+cmdo "run site-builder deploy --epochs 1 ./dist" --site-builder
+```
+
+The 0.2.4-beta system prompt includes hardened rules for positional arguments; if you see this in 0.2.4+, file an issue with the exact prompt.
+
+## LLM / planner
+
+### `LLM did not return valid JSON`
+
+**Cause:** The model produced prose-only output and the defensive parser couldn't extract a JSON object after the configured retries.
+
+**Fix:**
+
+1. Try a stronger model: `OPENAI_MODEL=gpt-4o cmdo "..."`.
+2. Re-phrase the prompt more concretely (verbs + objects, no rhetorical questions).
+3. Use the offline mock for known intents: `CMDO_LLM_MOCK=1 cmdo "..."`.
+
+---
+
+### `Plan validation failed: command 'sui client test-publish' not found in skills`
+
+**Cause:** The model hallucinated a subcommand that doesn't exist in the current `sui` CLI.
+
+**Fix:** This is the validator working as intended — the planner will retry with a tighter hint. If it persists across retries:
+
+```bash
+cmdo update-skills    # in case the contract is stale
+cmdo "..." --sui      # add explicit routing flag to narrow the prompt scope
+```
+
+## Safety gate
+
+### `Prompt blocked by safety policy`
+
+**Cause:** Your prompt matched a `PROMPT_PATTERNS` rule (Layer 1) — destructive intent, key exfiltration attempt, etc.
+
+**Fix:** Read the printed `reason`. If you genuinely need to do that destructive operation, run the underlying command directly — Commando doesn't execute prompts that look like system-wipe requests.
+
+False positive? File an issue with the exact prompt and the matched rule name; we'll narrow the regex.
+
+## Diagnostics
+
+When in doubt:
+
+```bash
+cmdo doctor
+```
+
+This prints:
+
+- Node version and platform.
+- `~/.commando/bin/` path and PATH membership.
+- Per-binary status (`present (+x)` / `present` / `sha256 ok` / `missing`).
+- LLM provider, model, and whether the key is configured.
+- `CMDO_LLM_MOCK` setting.
+
+Attach the full `cmdo doctor` output when filing an issue.
+
+## Still stuck?
+
+<Cards>
+  <Card title="GitHub Issues" description="Search existing issues or file a new one with cmdo doctor output." href="https://github.com/MystenLabs/sui-commando/issues" icon="MessageSquare" />
+  <Card title="Architecture" description="Understand the layer that's failing before debugging." href="/documentation/guides/architecture" icon="Layers" />
+  <Card title="CLI Reference" description="Confirm the subcommand and flag you expect actually exist." href="/documentation/reference/cli" icon="Terminal" />
+</Cards>
+
+---
+
+# Sui Cookbook (/examples/sui-flows)
+
+# Sui Cookbook
+
+Every prompt below has been validated against the 0.2.4-beta planner and the current `sui` CLI. Run them as-is.
+
+## Wallet
+
+### Create a new address
+
+```bash
+cmdo "create new sui address"
+```
+
+Plans `sui client new-address ed25519`. The first run also bootstraps `~/.sui/sui_config/client.yaml` if it doesn't already exist.
+
+### Show the active address
+
+```bash
+cmdo "show sui client active address" --sui
+```
+
+Plans `sui client active-address`. Use the `--sui` flag for predictability.
+
+### Show the active environment
+
+```bash
+cmdo "what is my current sui env" --sui
+```
+
+Plans `sui client active-env`. Useful before publishing — confirm you're on `testnet`, not `mainnet`.
+
+### Switch environment
+
+```bash
+cmdo "switch to testnet" --sui
+cmdo "switch to mainnet" --sui
+```
+
+Plans `sui client switch --env testnet` (or `mainnet`).
+
+## Gas
+
+### Check gas
+
+```bash
+cmdo "show my gas coins" --sui
+```
+
+Plans `sui client gas`. Each row is a coin object you can spend.
+
+### Get testnet SUI from the faucet
+
+```bash
+cmdo "give me testnet sui from faucet"
+```
+
+Commando hits the public testnet faucet directly via HTTP for the active address; you don't need to remember the URL or paste the address yourself. Wait 5-10 seconds, then re-run `cmdo "show my gas coins" --sui` to confirm.
+
+<Callout type="warn">
+  The faucet is rate-limited per address. If you get throttled, wait 60s and retry.
+</Callout>
+
+## Move
+
+All Move prompts run from a folder containing a `Move.toml`. The 0.2.4-beta planner explicitly disambiguates **build** vs **test** vs **publish** — three different verbs, three different commands.
+
+### Build
+
+```bash
+cmdo "build my move package"
+```
+
+Plans `sui move build`. **Does not** publish.
+
+### Test
+
+```bash
+cmdo "test my move package"
+```
+
+Plans `sui move test`. Streams the test runner output directly.
+
+### Publish
+
+```bash
+cmdo "publish my move package to testnet"
+```
+
+Plans `sui client publish --gas-budget 100000000 .` (or similar). Make sure you have:
+
+1. ≥ 0.1 SUI in gas (`cmdo "give me testnet sui from faucet"`).
+2. Successfully built (`cmdo "build my move package"`).
+3. Active env is `testnet` (`cmdo "switch to testnet" --sui` if not).
+
+The published package ID is in the transaction effects — Commando streams them verbatim.
+
+## Putting it together
+
+A clean "fresh machine to deployed contract" sequence on Linux/macOS:
+
+<Steps>
+  <Step>
+    ### Install + LLM key
+
+    ```bash
+    npm install -g sui-commando@beta
+    cmdo init
+    ```
+  </Step>
+  <Step>
+    ### Wallet + gas
+
+    ```bash
+    cmdo "create new sui address"
+    cmdo "switch to testnet" --sui
+    cmdo "give me testnet sui from faucet"
+    ```
+  </Step>
+  <Step>
+    ### Build + publish
+
+    ```bash
+    cd path/to/my/move/package
+    cmdo "build my move package"
+    cmdo "publish my move package to testnet"
+    ```
+  </Step>
+</Steps>
+
+Total wall time on a clean machine: ~5 minutes (mostly the binary download in step 1).
+
+## Common issues
+
+| Symptom | See |
+|---|---|
+| `could not find SUI coins with sufficient balance` | [Troubleshooting → Sui](/documentation/guides/troubleshooting#sui) |
+| `cmdo "build ..."` runs `client publish` | Upgrade to ≥ 0.2.4-beta |
+| `spawn ... ENOENT` for `sui.exe` on Linux | Upgrade to ≥ 0.2.3-beta |
+
+## Related
+
+<Cards>
+  <Card title="Walrus Sites" description="End-to-end static site deploy." href="/documentation/examples/walrus-sites" icon="Cloud" />
+  <Card title="CLI Reference" description="Every cmdo subcommand and flag." href="/documentation/reference/cli" icon="Terminal" />
+  <Card title="Troubleshooting" description="Common errors and fixes." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
+
+---
+
+# Walrus Sites — End to End (/examples/walrus-sites)
+
+# Walrus Sites — End to End
+
+This walkthrough takes you from a freshly built static site (`./dist`) to a live Walrus Sites URL using only `cmdo` prompts. Tested on Ubuntu x86_64 with Commando 0.2.4-beta.
+
+<Callout type="warn">
+  Walrus Sites requires `site-builder`, which is **not** available on `linux-aarch64`. Use Windows, Linux x86_64, or macOS.
+</Callout>
+
+## Prerequisites
+
+- Commando ≥ 0.2.4-beta installed and `cmdo doctor` is green.
+- A built static site folder (e.g. `./dist` from `npm run build`). ~1 MB is plenty for a first deploy.
+- An LLM provider configured (`cmdo init`), or `CMDO_LLM_MOCK=1` for offline mode.
+
+## 1. Wallet + gas
+
+You need a Sui testnet wallet with ≥ 0.5 SUI. If you already have one, skip ahead.
+
+```bash
+cmdo "create new sui address"
+cmdo "switch to testnet" --sui
+cmdo "give me testnet sui from faucet"
+sui client gas
+```
+
+Confirm at least one coin with balance ≥ `500000000` MIST (= 0.5 SUI). Re-run the faucet prompt if needed.
+
+## 2. WAL coins
+
+Walrus Sites pays for blob storage in WAL. Fetch some testnet WAL:
+
+```bash
+cmdo "get wal" --walrus
+```
+
+This plans `walrus get-wal`, which uses your active SUI to mint testnet WAL via the WAL exchange. Run twice if your first deploy is large (~10 MB site needs more WAL than a 1 MB site).
+
+<Callout type="info">
+  If you see `could not find WAL coins with sufficient balance` during the deploy step, your Walrus context is probably set to `mainnet` while your WAL is on `testnet`. See the [WAL coin troubleshooting entry](/documentation/guides/troubleshooting#error-could-not-find-wal-coins-with-sufficient-balance).
+</Callout>
+
+## 3. Sites config
+
+`site-builder` requires `~/.config/walrus/sites-config.yaml`. **Not** auto-bootstrapped in 0.2.4-beta:
+
+```bash
+mkdir -p ~/.config/walrus
+curl -L -o ~/.config/walrus/sites-config.yaml \
+  https://raw.githubusercontent.com/MystenLabs/walrus-sites/main/sites-config.yaml
+
+# Make sure the context matches your wallet (testnet)
+sed -i 's/^default_context: mainnet$/default_context: testnet/' \
+  ~/.config/walrus/sites-config.yaml
+```
+
+Verify:
+
+```bash
+grep '^default_context' ~/.config/walrus/sites-config.yaml
+# expected: default_context: testnet
+```
+
+## 4. Deploy
+
+From the folder containing your built site:
+
+```bash
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+```
+
+The planner emits something like `site-builder deploy --epochs 1 ./dist`. Commando spawns it, streams progress, and prints the resulting site object ID and URL on success.
+
+Equivalent explicit prompt if you want to control the epoch count:
+
+```bash
+cmdo "run site-builder deploy --epochs 5 ./dist" --site-builder
+```
+
+`--epochs N` controls how many storage epochs the site is paid for upfront. 1 epoch ≈ 24 hours on testnet at the time of writing.
+
+## 5. Verify
+
+The deploy output includes a Sui object ID for your site (e.g. `0xabc...`). Browse it:
+
+- **Walrus Sites portal:** `https://<base36-of-object-id>.walrus.site`
+- **Inspect via site-builder:**
+
+  ```bash
+  cmdo "show sitemap for site 0xabc..." --site-builder
+  ```
+
+  Plans `site-builder sitemap 0xabc...`.
+
+## 6. Update later
+
+To push a new version of the site to the same object ID:
+
+```bash
+cmdo "update walrus site 0xabc... from ./dist" --site-builder
+```
+
+Plans `site-builder update --epochs 1 ./dist 0xabc...`. Same WAL/SUI cost rules apply.
+
+## End-to-end timing
+
+On a clean Ubuntu VPS (Commando 0.2.4-beta, ~860 KB site):
+
+| Step | Wall time |
+|---|---|
+| Install + bootstrap | ~3 min (binary download) |
+| Wallet + faucet | ~30 s |
+| `walrus get-wal` | ~30 s |
+| `site-builder deploy` (1 epoch, 1 MB) | ~60 s |
+| **Total** | **~5 min** |
+
+## Troubleshooting checklist
+
+| Error | Fix |
+|---|---|
+| `could not find a valid sites configuration file` | Run the curl command in step 3. |
+| `could not find WAL coins with sufficient balance` | Check both `client_config.yaml` and `sites-config.yaml` are on `testnet`, then `cmdo "get wal" --walrus`. |
+| `could not find SUI coins with sufficient balance` | `cmdo "give me testnet sui from faucet"`, wait, retry. |
+| `missing <DIRECTORY>` | Be explicit: `cmdo "run site-builder deploy --epochs 1 ./dist" --site-builder`. |
+| `site-builder: missing` on `cmdo doctor` | You're on `linux-aarch64`. Deploy from x86_64 instead. |
+
+Full table: [Troubleshooting](/documentation/guides/troubleshooting).
+
+## Related
+
+<Cards>
+  <Card title="Sui Cookbook" description="Wallet, faucet, build, publish - the prerequisites for any chain operation." href="/documentation/examples/sui-flows" icon="BookOpen" />
+  <Card title="CLI Reference" description="site-builder routing flag and the full subcommand list." href="/documentation/reference/cli" icon="Terminal" />
+  <Card title="Troubleshooting" description="Every Walrus / site-builder error in one place." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
+
+---
+
+# CLI Reference (/reference/cli)
+
+# CLI Reference
+
+`cmdo` is a Commander-based CLI. The default action takes a free-text prompt; the rest are reserved subcommand names.
+
+## Synopsis
+
+```text
+cmdo [subcommand]
+cmdo <prompt...> [--sui | --walrus | --site-builder]
+```
+
+## Global options
+
+| Option | Description |
+|---|---|
+| `-v`, `--version` | Print the installed version (e.g. `0.2.4-beta`). |
+| `-h`, `--help` | Print help. |
+
+## Subcommands
+
+### `cmdo init`
+
+Interactively configure the LLM provider, API key, and model.
+
+```bash
+cmdo init
+```
+
+Prompts:
+
+1. Provider — `openai` or `openrouter`.
+2. API key — pasted at the prompt; stored in `~/.commando/config.json`.
+3. Model — picked from a curated dropdown (or accept the default).
+
+Re-run any time to switch providers or models. Env vars (`OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_MODEL`, `OPENROUTER_MODEL`) override the stored config when present.
+
+### `cmdo doctor`
+
+Print environment status and verify installed binaries. **Read-only** — does not download or modify anything.
+
+```bash
+cmdo doctor
+```
+
+Output includes Node version, platform, install root, PATH membership, per-binary status, and LLM provider configuration. See [Troubleshooting](/documentation/guides/troubleshooting) for what to do when checks fail.
+
+Exit code: `0` if all checks pass, `1` otherwise.
+
+### `cmdo bootstrap`
+
+Download binaries, patch PATH, bootstrap external CLI configs, and (re)generate skills. **Idempotent** — safe to re-run.
+
+```bash
+cmdo bootstrap
+```
+
+Use this after a partial install (network drop), after upgrading the package, or to recover from a stale state. To force a full re-download, delete `~/.commando/bin/` first.
+
+### `cmdo update-skills`
+
+Regenerate `~/.commando/skills/AGENT.md` from the currently installed binaries' `--help` output.
+
+```bash
+cmdo update-skills
+```
+
+Run this after any of the upstream binaries change versions — the LLM planner is constrained to the contract in `AGENT.md`, so a stale contract means stale plans.
+
+### `cmdo <prompt...>`
+
+The default action. Anything that isn't a known subcommand is treated as a natural-language prompt.
+
+```bash
+cmdo "show sui client active address"
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+cmdo create new sui address     # quotes are optional for simple prompts
+```
+
+#### Routing flags
+
+If multiple are passed, the first one wins.
+
+| Flag | Forces |
+|---|---|
+| `--sui` | Plan against the `sui` binary skill section only. |
+| `--walrus` | Plan against the `walrus` binary skill section only. |
+| `--site-builder` | Plan against the `site-builder` binary skill section only. |
+
+When no flag is passed, the router infers the target from prompt keywords. Always pass the explicit flag in scripts and demos for predictability.
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Plan succeeded, executed, and exited 0. |
+| `1` | Generic failure (LLM error, validation failure, spawn failure, exec non-zero). |
+| `>1` | Underlying binary's exit code is propagated. |
+
+## Examples
+
+### Wallet
+
+```bash
+cmdo "create new sui address"
+cmdo "show sui client active address" --sui
+cmdo "switch to testnet" --sui
+cmdo "give me testnet sui from faucet"
+```
+
+### Move
+
+```bash
+cmdo "build my move package"
+cmdo "test my move package"
+cmdo "publish my move package to testnet"
+```
+
+### Walrus
+
+```bash
+cmdo "show walrus info" --walrus
+cmdo "get wal" --walrus
+cmdo "list my blobs" --walrus
+```
+
+### Walrus Sites
+
+```bash
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+cmdo "run site-builder deploy --epochs 1 ./dist" --site-builder
+cmdo "show sitemap for site 0x..." --site-builder
+```
+
+## Where the binary lives
+
+| OS | Path |
+|---|---|
+| Windows | `%APPDATA%\npm\cmdo.cmd` (npm global bin) → `%USERPROFILE%\.commando\bin\` for upstream binaries |
+| Linux / macOS | `$(npm bin -g)/cmdo` → `~/.commando/bin/` for upstream binaries |
+
+## Related
+
+<Cards>
+  <Card title="Env Vars" description="Every environment variable cmdo reads." href="/documentation/reference/env-vars" icon="Settings" />
+  <Card title="LLM Setup" description="Provider, key, and model details for cmdo init." href="/documentation/guides/llm-setup" icon="Sparkles" />
+  <Card title="Troubleshooting" description="When a subcommand misbehaves." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
+
+---
+
+# Environment Variables (/reference/env-vars)
+
+# Environment Variables
+
+All variables are read at process start. There is no live reload — change the env, then re-run `cmdo`.
+
+## Installer
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CMDO_SKIP_BOOTSTRAP` | unset | Any non-empty value other than `0` / `false` skips the postinstall download. Use `cmdo bootstrap` later. |
+| `CMDO_DOWNLOAD_CONCURRENCY` | `3` | Parallel downloads during bootstrap. Lower on flaky networks. |
+| `CMDO_DOWNLOAD_IDLE_MS` | `120000` | Per-chunk idle timeout in milliseconds. Increase for slow links. |
+| `CMDO_DOWNLOAD_RETRIES` | `3` | Attempts per file before giving up. |
+
+## Optional R2 manifest mirror (Windows only)
+
+The R2 path is **off by default**. Set both vars to enable. When either is missing, the install falls back to GitHub-direct.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CMDO_MANIFEST_URL` | unset | Full URL to the manifest JSON in R2 (or any compatible mirror). |
+| `CMDO_R2_TOKEN` | unset | Bearer/header token the worker accepts. |
+
+<Callout type="warn">
+  No secret is shipped inside the npm tarball — both halves must come from the operator's environment. See [Installation](/documentation/guides/installation) for the security rationale.
+</Callout>
+
+## LLM provider
+
+Env vars override the values stored by `cmdo init` in `~/.commando/config.json`.
+
+### OpenAI
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENAI_API_KEY` | unset | Required if provider is OpenAI and no config file exists. |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Override the model. Any string accepted by the OpenAI API. |
+
+### OpenRouter
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENROUTER_API_KEY` | unset | Required if provider is OpenRouter and no config file exists. |
+| `OPENROUTER_MODEL` | `z-ai/glm-4.5-air:free` | Override the model. Any string accepted by OpenRouter. |
+
+## Planner
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CMDO_LLM_MOCK` | `0` | Set to `1` to bypass the LLM and use the deterministic regex-based mock planner. Useful for offline demos and CI. |
+
+## Logging
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CMDO_LOG_LEVEL` | `info` | One of `debug`, `info`, `warn`, `error`. `debug` adds raw LLM input/output and validator decisions. |
+| `NO_COLOR` | unset | Standard env: any non-empty value disables ANSI colors. |
+
+## Examples
+
+### CI build that defers the binary download
+
+```bash
+CMDO_SKIP_BOOTSTRAP=1 npm install -g sui-commando@beta
+# ... later, only on the runner that needs the CLIs:
+cmdo bootstrap
+```
+
+### Air-gapped install pulling from a private R2 mirror
+
+```powershell
+# Windows PowerShell
+$env:CMDO_MANIFEST_URL = "https://r2.internal/object?key=manifests/commando-0.2.4-beta.json"
+$env:CMDO_R2_TOKEN     = "<bearer-token-the-worker-accepts>"
+npm install -g sui-commando@beta
+```
+
+### Prefer env-only LLM setup (no `cmdo init`)
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+export OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
+cmdo "show walrus info" --walrus
+```
+
+### Offline hackathon demo
+
+```bash
+CMDO_LLM_MOCK=1 cmdo "show sui client active address" --sui
+```
+
+## Related
+
+<Cards>
+  <Card title="CLI Reference" description="Every cmdo subcommand and flag." href="/documentation/reference/cli" icon="Terminal" />
+  <Card title="Installation" description="When and why each installer var matters." href="/documentation/guides/installation" icon="Download" />
+  <Card title="LLM Setup" description="Provider/model decision tree." href="/documentation/guides/llm-setup" icon="Sparkles" />
+</Cards>
+
+---
+
+# Sui Cookbook (/examples\sui-flows)
+
+# Sui Cookbook
+
+Every prompt below has been validated against the 0.2.4-beta planner and the current `sui` CLI. Run them as-is.
+
+## Wallet
+
+### Create a new address
+
+```bash
+cmdo "create new sui address"
+```
+
+Plans `sui client new-address ed25519`. The first run also bootstraps `~/.sui/sui_config/client.yaml` if it doesn't already exist.
+
+### Show the active address
+
+```bash
+cmdo "show sui client active address" --sui
+```
+
+Plans `sui client active-address`. Use the `--sui` flag for predictability.
+
+### Show the active environment
+
+```bash
+cmdo "what is my current sui env" --sui
+```
+
+Plans `sui client active-env`. Useful before publishing — confirm you're on `testnet`, not `mainnet`.
+
+### Switch environment
+
+```bash
+cmdo "switch to testnet" --sui
+cmdo "switch to mainnet" --sui
+```
+
+Plans `sui client switch --env testnet` (or `mainnet`).
+
+## Gas
+
+### Check gas
+
+```bash
+cmdo "show my gas coins" --sui
+```
+
+Plans `sui client gas`. Each row is a coin object you can spend.
+
+### Get testnet SUI from the faucet
+
+```bash
+cmdo "give me testnet sui from faucet"
+```
+
+Commando hits the public testnet faucet directly via HTTP for the active address; you don't need to remember the URL or paste the address yourself. Wait 5-10 seconds, then re-run `cmdo "show my gas coins" --sui` to confirm.
+
+<Callout type="warn">
+  The faucet is rate-limited per address. If you get throttled, wait 60s and retry.
+</Callout>
+
+## Move
+
+All Move prompts run from a folder containing a `Move.toml`. The 0.2.4-beta planner explicitly disambiguates **build** vs **test** vs **publish** — three different verbs, three different commands.
+
+### Build
+
+```bash
+cmdo "build my move package"
+```
+
+Plans `sui move build`. **Does not** publish.
+
+### Test
+
+```bash
+cmdo "test my move package"
+```
+
+Plans `sui move test`. Streams the test runner output directly.
+
+### Publish
+
+```bash
+cmdo "publish my move package to testnet"
+```
+
+Plans `sui client publish --gas-budget 100000000 .` (or similar). Make sure you have:
+
+1. ≥ 0.1 SUI in gas (`cmdo "give me testnet sui from faucet"`).
+2. Successfully built (`cmdo "build my move package"`).
+3. Active env is `testnet` (`cmdo "switch to testnet" --sui` if not).
+
+The published package ID is in the transaction effects — Commando streams them verbatim.
+
+## Putting it together
+
+A clean "fresh machine to deployed contract" sequence on Linux/macOS:
+
+<Steps>
+  <Step>
+    ### Install + LLM key
+
+    ```bash
+    npm install -g sui-commando@beta
+    cmdo init
+    ```
+  </Step>
+  <Step>
+    ### Wallet + gas
+
+    ```bash
+    cmdo "create new sui address"
+    cmdo "switch to testnet" --sui
+    cmdo "give me testnet sui from faucet"
+    ```
+  </Step>
+  <Step>
+    ### Build + publish
+
+    ```bash
+    cd path/to/my/move/package
+    cmdo "build my move package"
+    cmdo "publish my move package to testnet"
+    ```
+  </Step>
+</Steps>
+
+Total wall time on a clean machine: ~5 minutes (mostly the binary download in step 1).
+
+## Common issues
+
+| Symptom | See |
+|---|---|
+| `could not find SUI coins with sufficient balance` | [Troubleshooting → Sui](/documentation/guides/troubleshooting#sui) |
+| `cmdo "build ..."` runs `client publish` | Upgrade to ≥ 0.2.4-beta |
+| `spawn ... ENOENT` for `sui.exe` on Linux | Upgrade to ≥ 0.2.3-beta |
+
+## Related
+
+<Cards>
+  <Card title="Walrus Sites" description="End-to-end static site deploy." href="/documentation/examples/walrus-sites" icon="Cloud" />
+  <Card title="CLI Reference" description="Every cmdo subcommand and flag." href="/documentation/reference/cli" icon="Terminal" />
+  <Card title="Troubleshooting" description="Common errors and fixes." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
+
+---
+
+# Walrus Sites — End to End (/examples\walrus-sites)
+
+# Walrus Sites — End to End
+
+This walkthrough takes you from a freshly built static site (`./dist`) to a live Walrus Sites URL using only `cmdo` prompts. Tested on Ubuntu x86_64 with Commando 0.2.4-beta.
+
+<Callout type="warn">
+  Walrus Sites requires `site-builder`, which is **not** available on `linux-aarch64`. Use Windows, Linux x86_64, or macOS.
+</Callout>
+
+## Prerequisites
+
+- Commando ≥ 0.2.4-beta installed and `cmdo doctor` is green.
+- A built static site folder (e.g. `./dist` from `npm run build`). ~1 MB is plenty for a first deploy.
+- An LLM provider configured (`cmdo init`), or `CMDO_LLM_MOCK=1` for offline mode.
+
+## 1. Wallet + gas
+
+You need a Sui testnet wallet with ≥ 0.5 SUI. If you already have one, skip ahead.
+
+```bash
+cmdo "create new sui address"
+cmdo "switch to testnet" --sui
+cmdo "give me testnet sui from faucet"
+sui client gas
+```
+
+Confirm at least one coin with balance ≥ `500000000` MIST (= 0.5 SUI). Re-run the faucet prompt if needed.
+
+## 2. WAL coins
+
+Walrus Sites pays for blob storage in WAL. Fetch some testnet WAL:
+
+```bash
+cmdo "get wal" --walrus
+```
+
+This plans `walrus get-wal`, which uses your active SUI to mint testnet WAL via the WAL exchange. Run twice if your first deploy is large (~10 MB site needs more WAL than a 1 MB site).
+
+<Callout type="info">
+  If you see `could not find WAL coins with sufficient balance` during the deploy step, your Walrus context is probably set to `mainnet` while your WAL is on `testnet`. See the [WAL coin troubleshooting entry](/documentation/guides/troubleshooting#error-could-not-find-wal-coins-with-sufficient-balance).
+</Callout>
+
+## 3. Sites config
+
+`site-builder` requires `~/.config/walrus/sites-config.yaml`. **Not** auto-bootstrapped in 0.2.4-beta:
+
+```bash
+mkdir -p ~/.config/walrus
+curl -L -o ~/.config/walrus/sites-config.yaml \
+  https://raw.githubusercontent.com/MystenLabs/walrus-sites/main/sites-config.yaml
+
+# Make sure the context matches your wallet (testnet)
+sed -i 's/^default_context: mainnet$/default_context: testnet/' \
+  ~/.config/walrus/sites-config.yaml
+```
+
+Verify:
+
+```bash
+grep '^default_context' ~/.config/walrus/sites-config.yaml
+# expected: default_context: testnet
+```
+
+## 4. Deploy
+
+From the folder containing your built site:
+
+```bash
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+```
+
+The planner emits something like `site-builder deploy --epochs 1 ./dist`. Commando spawns it, streams progress, and prints the resulting site object ID and URL on success.
+
+Equivalent explicit prompt if you want to control the epoch count:
+
+```bash
+cmdo "run site-builder deploy --epochs 5 ./dist" --site-builder
+```
+
+`--epochs N` controls how many storage epochs the site is paid for upfront. 1 epoch ≈ 24 hours on testnet at the time of writing.
+
+## 5. Verify
+
+The deploy output includes a Sui object ID for your site (e.g. `0xabc...`). Browse it:
+
+- **Walrus Sites portal:** `https://<base36-of-object-id>.walrus.site`
+- **Inspect via site-builder:**
+
+  ```bash
+  cmdo "show sitemap for site 0xabc..." --site-builder
+  ```
+
+  Plans `site-builder sitemap 0xabc...`.
+
+## 6. Update later
+
+To push a new version of the site to the same object ID:
+
+```bash
+cmdo "update walrus site 0xabc... from ./dist" --site-builder
+```
+
+Plans `site-builder update --epochs 1 ./dist 0xabc...`. Same WAL/SUI cost rules apply.
+
+## End-to-end timing
+
+On a clean Ubuntu VPS (Commando 0.2.4-beta, ~860 KB site):
+
+| Step | Wall time |
+|---|---|
+| Install + bootstrap | ~3 min (binary download) |
+| Wallet + faucet | ~30 s |
+| `walrus get-wal` | ~30 s |
+| `site-builder deploy` (1 epoch, 1 MB) | ~60 s |
+| **Total** | **~5 min** |
+
+## Troubleshooting checklist
+
+| Error | Fix |
+|---|---|
+| `could not find a valid sites configuration file` | Run the curl command in step 3. |
+| `could not find WAL coins with sufficient balance` | Check both `client_config.yaml` and `sites-config.yaml` are on `testnet`, then `cmdo "get wal" --walrus`. |
+| `could not find SUI coins with sufficient balance` | `cmdo "give me testnet sui from faucet"`, wait, retry. |
+| `missing <DIRECTORY>` | Be explicit: `cmdo "run site-builder deploy --epochs 1 ./dist" --site-builder`. |
+| `site-builder: missing` on `cmdo doctor` | You're on `linux-aarch64`. Deploy from x86_64 instead. |
+
+Full table: [Troubleshooting](/documentation/guides/troubleshooting).
+
+## Related
+
+<Cards>
+  <Card title="Sui Cookbook" description="Wallet, faucet, build, publish - the prerequisites for any chain operation." href="/documentation/examples/sui-flows" icon="BookOpen" />
+  <Card title="CLI Reference" description="site-builder routing flag and the full subcommand list." href="/documentation/reference/cli" icon="Terminal" />
+  <Card title="Troubleshooting" description="Every Walrus / site-builder error in one place." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
+
+---
+
+# Architecture (/guides\architecture)
+
+# Architecture
+
+Commando is a thin orchestration layer between human intent and three upstream Mysten Labs CLIs. Everything runs locally; nothing in the request path requires a Commando-owned server.
+
+## Component diagram
+
+```mermaid
+flowchart LR
+    U[User Prompt] --> C[cmdo CLI entrypoint]
+    C --> R[Intent Router]
+    R --> S[Skill Loader\nAGENT.md]
+    R --> L[LLM Planner]
+    S --> L
+    L --> V[Plan Validator\nallowlist + flag check]
+    V --> G[Safety Gate]
+    G --> E[Execution Engine]
+    E --> B[sui / walrus / site-builder]
+    B --> O[Streamed Output]
+    B --> H[Stderr-tail Hint Matcher]
+    H --> O
+```
+
+## 1. Installer & Bootstrap
+
+Triggered by npm `postinstall` (also runnable as `cmdo bootstrap`). Lives in `src/bootstrap/`.
+
+- **`platform.ts`** — detects host OS (`windows` / `linux` / `macos`) and arch (`x86_64` / `aarch64` / `arm64`); throws on unsupported triples with a clear message.
+- **`download-gh.ts`** — direct GitHub release downloads; system `tar` extraction; chmod +x on Unix.
+- **`download.ts` + `r2Client.ts`** — opt-in R2 manifest path (Windows only, gated by `CMDO_MANIFEST_URL` + `CMDO_R2_TOKEN`); adds SHA256 provenance per binary.
+- **`addToPath.ts`** — Windows registry edit; appends to `~/.bashrc` / `~/.zshrc` / `~/.bash_profile` / `~/.profile` on Unix with an idempotence marker.
+- **`configs.ts`** — auto-bootstraps `~/.sui/sui_config/client.yaml` (non-interactive `sui client active-address` piped with `y\n\n0\n`) and fetches `~/.config/walrus/client_config.yaml` from the Mysten docs (testnet default).
+
+## 2. Skill Generator
+
+`src/skills/generator.ts` shells out to each binary with `--help` (and one level of subcommand `--help`), parses the output into normalized markdown sections, and writes `~/.commando/skills/AGENT.md`. The generator is platform-aware — it resolves `sui` vs `sui.exe` via `toolFilename(base)` so the same logic works on Windows and Unix.
+
+`AGENT.md` is the **single source of truth** for the LLM planner. Re-run `cmdo update-skills` after upgrading any binary.
+
+## 3. Intent Router
+
+`src/router/`. Two strategies, in order:
+
+1. **Hard override** — `--sui`, `--walrus`, or `--site-builder` flag wins immediately.
+2. **Keyword inference** — score-based matching against tool-specific verbs and nouns (e.g. "publish", "move", "address" → sui; "blob", "wal" → walrus; "deploy", "site", "epochs" → site-builder).
+
+The router also performs **scope reduction**: only the relevant section of `AGENT.md` is sent to the LLM, keeping the prompt small and reducing the hallucination surface.
+
+## 4. LLM Planner
+
+`src/llm/planner.ts`. Calls OpenAI or OpenRouter with a hard-rules system prompt:
+
+- Output **must** be a single JSON object `{ binary, args }`.
+- The `binary` value is normalized against an allowlist (`sui` / `walrus` / `site-builder`, with the platform-correct `.exe` suffix on Windows).
+- Positional arguments (directories, object IDs, hashes) are emitted as bare strings — never as flags.
+- Verbs are disambiguated explicitly (`build` ≠ `test` ≠ `publish`; `deploy <DIRECTORY>` requires the directory).
+
+### Defensive parsing
+
+`tryParseJson` extracts the first balanced JSON object from the raw LLM output, even when the model wraps it in prose, markdown fences, or smart quotes. If the model returns nothing usable after the configured retries, the call fails with a clear "LLM did not return valid JSON" error.
+
+### Plan validation
+
+`validatePlan(plan, ctx)` checks:
+
+1. `binary` is in the allowlist.
+2. The leading non-flag tokens of `args` form a command path that exists in `ctx.allowedCommands` (built from `AGENT.md`).
+3. Every flag in `args` exists in the skill contract for that command path.
+
+A failed check triggers a retry with a tighter hint instead of forwarding a hallucinated command. After the final retry, the call surfaces the validation error.
+
+### Mock mode
+
+`CMDO_LLM_MOCK=1` swaps in a deterministic regex-driven planner that covers the most common Sui / Walrus / Site-builder verbs. Useful for hackathon demos with unreliable network and for unit tests.
+
+## 5. Safety Gate
+
+`src/safety/gate.ts`. Runs **twice**:
+
+- **Pre-LLM** — pattern-matches the raw user prompt against `PROMPT_PATTERNS` (cross-platform destructive intent: `del C:\\`, `rm -rf /`, `format`, `mkfs`, `dd if=`, `shutdown`, `reboot`, ...). Blocks before any tokens are sent to a third party.
+- **Post-LLM** — pattern-matches the planned `args` array against `ARG_PATTERNS`. Catches cases where the LLM re-introduces destructive arguments despite a benign-looking prompt.
+
+Plus the structural allowlist: `binary` must resolve to a file inside `~/.commando/bin/`.
+
+## 6. Execution Engine
+
+`src/exec/spawner.ts`. Uses `child_process.spawn` with explicit argument arrays — no shell interpolation, so quoting is never an issue.
+
+- `stdio: ['inherit', 'inherit', 'pipe']` — stdin and stdout pass through directly to the user's terminal; stderr is teed to `process.stderr` (live output) **and** captured into a small ring buffer.
+- On non-zero exit, the ring buffer is matched against `FAILURE_HINTS`. Examples:
+  - `could not find a valid Walrus configuration file` → "run `cmdo bootstrap` to recreate the client config".
+  - `could not find WAL coins with sufficient balance` → "run `cmdo \"get wal\"` (and verify your context is testnet)".
+  - `could not find SUI coins with sufficient balance` → "run `cmdo \"give me testnet sui from faucet\"`".
+
+This keeps the user out of "stare at a stack trace" mode.
+
+## Data & state
+
+| Path | Owner | Purpose |
+|---|---|---|
+| `~/.commando/bin/` | Commando | Downloaded upstream binaries |
+| `~/.commando/skills/AGENT.md` | Commando | Generated command/flag contract for the LLM |
+| `~/.commando/sandbox/default/` | Commando | Default sandbox profile (configs, keystore, projects) |
+| `~/.commando/cache/` | Commando | Temporary downloads, manifests, etc. |
+| `~/.sui/sui_config/` | Sui CLI | Wallet, keystore, client config |
+| `~/.config/walrus/client_config.yaml` | Walrus CLI | Walrus testnet/mainnet endpoints |
+| `~/.config/walrus/sites-config.yaml` | Site-builder | Walrus Sites contexts (manual in 0.2.4-beta) |
+
+No server-side user state in MVP.
+
+## Security posture (v0.2.4-beta)
+
+- **No secrets in the npm tarball.** `src/config/defaults.ts` is treated as semi-public; the previous hardcoded R2 manifest auth key was removed and rotated. Operator credentials (R2 token, LLM API keys) are read from env vars only.
+- Local key storage only; no key exfiltration feature.
+- Minimal permission model with local file boundaries.
+- Pre-LLM safety gate keeps destructive intent out of third-party prompts.
+- Post-LLM safety gate + allowlist keeps destructive args off `spawn`.
+- Optional command audit log (stretch, off by default).
+
+## Reliability choices
+
+- Direct upstream downloads remove the operator-owned mirror as a single point of failure.
+- Single sandbox profile keeps profile-management bugs out of MVP.
+- Single-step execution per prompt — no multi-step planning loop.
+- Idempotent recovery commands: `cmdo bootstrap` and `cmdo update-skills`.
+
+## Post-MVP
+
+- Multiple sandbox profiles + sharing model.
+- Signed command templates and a richer policy engine.
+- Provider routing/fallback for LLM calls.
+- Optional signed manifest distribution (rebuild the R2 path with rotated keys + per-asset signatures).
+
+## Next
+
+<Cards>
+  <Card title="Safety" description="What the safety gate blocks and how to extend the patterns." href="/documentation/guides/safety" icon="Lock" />
+  <Card title="LLM Setup" description="Provider choice and model defaults." href="/documentation/guides/llm-setup" icon="Sparkles" />
+  <Card title="CLI Reference" description="Every cmdo subcommand and flag." href="/documentation/reference/cli" icon="Terminal" />
+</Cards>
+
+---
+
+# Components (/guides\components)
+
+# Components
+
+cmdocs ships with a rich set of components. Use them in any MDX file — no imports required.
+
+## Callout
+
+Highlight important information.
+
+<Callout type="info">
+  This is an informational callout. Use it for tips and notes.
+</Callout>
+
+<Callout type="warn">
+  This is a warning callout. Use it for caveats and gotchas.
+</Callout>
+
+<Callout type="error">
+  This is an error callout. Use it for destructive actions or critical warnings.
+</Callout>
+
+```mdx
+<Callout type="info">An info callout.</Callout>
+<Callout type="warn">A warning callout.</Callout>
+<Callout type="error">An error callout.</Callout>
+```
+
+## Cards
+
+Display linked content in a responsive grid.
+
+<Cards>
+  <Card title="Quickstart" description="Edit your first page in 2 minutes." href="/documentation/quickstart" icon="Rocket" />
+  <Card title="Writing Content" description="MDX basics and frontmatter." href="/documentation/guides/writing-content" icon="PencilLine" />
+</Cards>
+
+```mdx
+<Cards>
+  <Card title="Quickstart" description="Edit your first page." href="/documentation/quickstart" icon="Rocket" />
+  <Card title="Writing Content" description="MDX basics." href="/documentation/guides/writing-content" icon="PencilLine" />
+</Cards>
+```
+
+The `icon` prop accepts any [Lucide icon name](https://lucide.dev/icons).
+
+## Tabs
+
+Switch between content views.
+
+<Tabs items={["npm", "bun", "pnpm"]}>
+  <Tab value="npm">
+    ```bash
+    npm install cmdocs
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```bash
+    bun add cmdocs
+    ```
+  </Tab>
+  <Tab value="pnpm">
+    ```bash
+    pnpm add cmdocs
+    ```
+  </Tab>
+</Tabs>
+
+````mdx
+<Tabs items={["npm", "bun", "pnpm"]}>
+  <Tab value="npm">
+    ```bash
+    npm install cmdocs
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```bash
+    bun add cmdocs
+    ```
+  </Tab>
+  <Tab value="pnpm">
+    ```bash
+    pnpm add cmdocs
+    ```
+  </Tab>
+</Tabs>
+````
+
+## Steps
+
+Numbered, sequential instructions.
+
+<Steps>
+  <Step>
+    **Install** — Run the install command for your package manager.
+  </Step>
+  <Step>
+    **Initialize** — Run `cmdocs init` to scaffold a new project.
+  </Step>
+  <Step>
+    **Write** — Open your MDX files and start documenting.
+  </Step>
+</Steps>
+
+```mdx
+<Steps>
+  <Step>**Install** — Run the install command.</Step>
+  <Step>**Initialize** — Run `cmdocs init`.</Step>
+  <Step>**Write** — Start documenting.</Step>
+</Steps>
+```
+
+## Accordion
+
+Collapsible sections — great for FAQs.
+
+<Accordions>
+  <Accordion title="What is cmdocs?">
+    cmdocs is a documentation platform that builds beautiful static sites from MDX.
+  </Accordion>
+  <Accordion title="Is it free?">
+    cmdocs has a generous free tier — get started without a credit card.
+  </Accordion>
+  <Accordion title="How do I deploy?">
+    Push your repo to GitHub and connect it in the [cmdocs dashboard](https://cmdocs.sh). Every commit triggers a build and deploys to `<your-project>.cmdocs.app` automatically.
+  </Accordion>
+</Accordions>
+
+```mdx
+<Accordions>
+  <Accordion title="What is cmdocs?">
+    cmdocs is a documentation platform.
+  </Accordion>
+  <Accordion title="Is it free?">
+    cmdocs has a generous free tier.
+  </Accordion>
+</Accordions>
+```
+
+## Files
+
+Show file tree structures.
+
+<Files>
+  <Folder name="my-docs" defaultOpen>
+    <File name="docs.json" />
+    <File name="index.mdx" />
+    <File name="quickstart.mdx" />
+    <Folder name="guides" defaultOpen>
+      <File name="writing-content.mdx" />
+      <File name="components.mdx" />
+    </Folder>
+    <Folder name="public" defaultOpen>
+      <File name="favicon.svg" />
+      <Folder name="logo" defaultOpen>
+        <File name="light.svg" />
+        <File name="dark.svg" />
+      </Folder>
+    </Folder>
+  </Folder>
+</Files>
+
+```mdx
+<Files>
+  <Folder name="my-docs" defaultOpen>
+    <File name="docs.json" />
+    <File name="index.mdx" />
+    <Folder name="guides" defaultOpen>
+      <File name="writing-content.mdx" />
+    </Folder>
+  </Folder>
+</Files>
+```
+
+## TypeTable
+
+Document props, configuration options, or API parameters.
+
+<TypeTable
+  type={{
+    name: { description: "Site name shown in the navbar.", type: "string", required: true },
+    description: { description: "Short description for SEO meta tags.", type: "string" },
+    theme: { description: "Theme settings — colors, dark mode, layout.", type: "ThemeConfig" },
+  }}
+/>
+
+```mdx
+<TypeTable
+  type={{
+    name: { description: "Site name.", type: "string", required: true },
+    theme: { description: "Theme settings.", type: "ThemeConfig" },
+  }}
+/>
+```
+
+## Mermaid
+
+Render diagrams from [Mermaid](https://mermaid.js.org/) syntax. Great for flow charts, sequence diagrams, and architecture overviews.
+
+<Mermaid chart="graph LR;
+    A[Write MDX] --> B[git push];
+    B --> C[cmdocs dashboard];
+    C --> D[Live site];" />
+
+````mdx
+```mermaid
+graph LR;
+    A[Write MDX] --> B[git push];
+    B --> C[cmdocs dashboard];
+    C --> D[Live site];
+```
+````
+
+Mermaid diagrams adapt to light and dark themes automatically.
+
+## Images
+
+All images are zoomable — click to expand. Use either Markdown or `<img>`:
+
+```mdx
+![Architecture diagram](/images/architecture.png)
+
+<img src="/images/screenshot.png" alt="Dashboard screenshot" width="600" />
+```
+
+Place images in the `public/` folder and reference them with an absolute path starting with `/`.
+
+## Banner
+
+Display a site-wide announcement above the navbar. Use `<Banner>` at the top of any MDX file — the most recent occurrence wins, and it appears on every page:
+
+```mdx title="index.mdx"
+<Banner>
+  cmdocs v1.0 is out — [read the release notes](/documentation/changelog).
+</Banner>
+```
+
+Banners support full Markdown, including links and inline code. Common patterns:
+
+```mdx
+<Banner>
+  🎉 We just shipped v2 — [see what's new](/documentation/changelog).
+</Banner>
+
+<Banner>
+  ⚠️ Scheduled maintenance tonight, 22:00-23:00 UTC.
+</Banner>
+```
+
+To remove the banner, delete the `<Banner>` tag from your MDX. To show it only on certain pages, place the tag only in those files.
+
+## Component reference
+
+<TypeTable
+  type={{
+    Callout: { type: "Component", description: "Highlight info. Props: type ('info' | 'warn' | 'error')." },
+    Card: { type: "Component", description: "A linked card. Props: title, description, href, icon." },
+    Cards: { type: "Component", description: "Responsive grid for Card components." },
+    Tab: { type: "Component", description: "A single tab panel inside Tabs. Props: value." },
+    Tabs: { type: "Component", description: "Tabbed content container. Props: items (string[])." },
+    Step: { type: "Component", description: "A single step inside Steps." },
+    Steps: { type: "Component", description: "Numbered step container." },
+    Accordion: { type: "Component", description: "Collapsible section. Props: title." },
+    Accordions: { type: "Component", description: "Container for Accordion items." },
+    File: { type: "Component", description: "A file in a Files tree. Props: name." },
+    Folder: { type: "Component", description: "A folder in a Files tree. Props: name, defaultOpen." },
+    Files: { type: "Component", description: "File tree container." },
+    TypeTable: { type: "Component", description: "Property/type table. Props: type (object)." },
+    Mermaid: { type: "Component", description: "Mermaid diagram. Props: chart (string)." },
+    Banner: { type: "Component", description: "Site-wide banner above the navbar." },
+  }}
+/>
+
+---
+
+# Deploy (/guides\deploy)
+
+# Deploy
+
+cmdocs is push-to-deploy. Connect your GitHub repo in the [cmdocs dashboard](https://cmdocs.sh), and every commit to your tracked branch produces a new build and deploys automatically. No CLI export, no manual uploads, no hosting config to maintain.
+
+## What you get
+
+| Feature | Description |
+|---|---|
+| **Git integration** | One-click GitHub OAuth + repo picker; webhooks configured for you |
+| **Auto-builds on push** | Every commit to your tracked branch produces a fresh deployment |
+| **Multiple environments** | Production, staging, and preview branches — each tracking its own branch |
+| **Subdomain + HTTPS** | Each environment gets `<slug>.cmdocs.app` with TLS provisioned automatically |
+| **Custom domains** | Bring your own domain — DNS instructions in project settings |
+| **Build logs** | Live, streaming logs per build; errors surface inline |
+| **Deployment history** | Roll back to any previous deployment in one click |
+
+## How it works
+
+<Mermaid chart="sequenceDiagram
+    participant Dev as You
+    participant GH as GitHub
+    participant API as cmdocs API
+    participant W as Build Worker
+    participant CDN as cmdocs CDN
+    Dev->>GH: git push main
+    GH->>API: webhook (HMAC verified)
+    API->>API: create deployment (queued)
+    API->>W: enqueue build job
+    W->>GH: clone repo
+    W->>W: run cmdocs pipeline
+    W->>W: static export (HTML + CSS + JS)
+    W->>API: upload artifacts
+    API->>CDN: publish
+    CDN-->>Dev: site live at subdomain" />
+
+A typical build finishes in under a minute.
+
+## Walkthrough
+
+<Steps>
+  <Step>
+    ### Sign in
+
+    Go to [cmdocs.sh](https://cmdocs.sh) and sign in with GitHub.
+  </Step>
+  <Step>
+    ### Install the cmdocs GitHub App
+
+    The dashboard prompts you to install the cmdocs GitHub App. Grant it access to the repos you want to deploy — you can pick a single repo or your whole org.
+  </Step>
+  <Step>
+    ### Create a project
+
+    Click **New project**, select your docs repository, and confirm the default branch (usually `main`).
+  </Step>
+  <Step>
+    ### Watch the first build
+
+    The first build starts automatically. Watch the logs stream live in the dashboard. When the build turns green, your site is reachable at `<your-slug>.cmdocs.app`.
+  </Step>
+  <Step>
+    ### Push to deploy
+
+    Every subsequent commit to the tracked branch triggers a new build. Roll back to any previous version from the Deployments tab.
+  </Step>
+</Steps>
+
+<Callout type="info">
+  Before you push, run `npx cmdocs check` locally — it runs the same validation the build worker does and catches typos, missing pages, and broken links before they consume CI minutes. See the [Validate guide](/documentation/guides/validate) to wire it into a pre-commit hook.
+</Callout>
+
+## Environments
+
+Every project starts with a **production** environment tracking `main`. Add more environments for staging or feature branches:
+
+| Environment | Branch | Subdomain | Triggers on |
+|---|---|---|---|
+| `production` | `main` | `<slug>.cmdocs.app` | Push to `main` |
+| `staging` | `develop` | `<slug>-staging.cmdocs.app` | Push to `develop` |
+| `preview` | any PR | `<slug>-pr-<n>.cmdocs.app` | PR opened/updated |
+
+Configure them under **Project → Settings → Environments**.
+
+## Custom domains
+
+Add your own domain under **Project → Settings → Domains**. The dashboard walks you through the DNS records to add at your registrar and provisions TLS via Let's Encrypt automatically once DNS propagates.
+
+## Troubleshooting
+
+<Accordions>
+  <Accordion title="My build failed with a schema error">
+    Run `npx cmdocs check` locally — it will surface the exact schema problem before you push. The build worker runs the same validation; if it fails, the error message in the dashboard is the same you'll see locally.
+  </Accordion>
+  <Accordion title="The site is live but images are 404ing">
+    Assets must live under `public/` in your repo. A path like `public/images/hero.png` is served at `/images/hero.png`. If an asset is missing, `cmdocs check` catches it for files referenced in `docs.json`; assets referenced only from MDX still need to be under `public/`.
+  </Accordion>
+  <Accordion title="I want to use a monorepo with docs in a subdirectory">
+    In project settings, set the **Source directory** to the path of your `docs.json` (for example, `docs/` or `apps/docs/`). The dashboard only rebuilds when files inside that directory change.
+  </Accordion>
+  <Accordion title="Can I preview a branch without making it production?">
+    Yes — add a new environment tracking that branch. Or enable PR previews: every open PR gets its own `<slug>-pr-<n>.cmdocs.app` deployment that updates on each push.
+  </Accordion>
+  <Accordion title="I need to roll back a broken deploy">
+    Open the **Deployments** tab, find the last known-good deployment, and click **Promote**. It's instant — no rebuild.
+  </Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Validate" description="Run cmdocs check before every commit." href="/documentation/guides/validate" icon="ShieldCheck" />
+  <Card title="Writing Content" description="Add pages, configure navigation, tweak SEO." href="/documentation/guides/writing-content" icon="PencilLine" />
+</Cards>
+
+---
+
+# Installation (/guides\installation)
+
+# Installation
+
+Commando is shipped as a single npm package, `sui-commando`, that runs on Windows, Linux, and macOS. The `postinstall` hook handles binary downloads, PATH patching, and external CLI config bootstrap.
+
+## Supported platforms
+
+| OS | Arch | `sui` | `walrus` | `site-builder` |
+|---|---|---|---|---|
+| Windows | x86_64 | Yes | Yes | Yes |
+| Linux | x86_64 | Yes | Yes | Yes |
+| Linux | aarch64 | Yes | Yes | **Skipped** (no upstream build) |
+| macOS | x86_64 (Intel) | Yes | Yes | Yes |
+| macOS | arm64 (Apple Silicon) | Yes | Yes | Yes |
+
+<Callout type="warn">
+  On `linux-aarch64` the upstream `MystenLabs/walrus-sites` release does not ship a binary, so `site-builder` is skipped gracefully. Walrus Sites prompts will fail with a clear message; deploy from an x86_64 machine instead.
+</Callout>
+
+## Install
+
+```bash
+npm install -g sui-commando@beta
+```
+
+That's it. The hook will:
+
+1. Detect OS + arch (`bootstrap/platform.ts`).
+2. Download `.tgz` archives directly from the upstream Mysten Labs GitHub releases.
+3. Extract them with the system `tar` and set the executable bit on Unix.
+4. Patch your shell PATH (Windows registry; `~/.bashrc` / `~/.zshrc` / `~/.bash_profile` / `~/.profile` on Unix).
+5. Bootstrap the Sui wallet (`~/.sui/sui_config/client.yaml`) and Walrus client config (`~/.config/walrus/client_config.yaml`, testnet default).
+6. Generate `~/.commando/skills/AGENT.md` from each binary's `--help` output.
+
+## Verify
+
+```bash
+cmdo doctor
+```
+
+Expected output (Linux example):
+
+```text
+node: v20.x
+platform: linux-x86_64
+cpu: <model>
+install root: /root/.commando
+bin dir: /root/.commando/bin [ok]
+skills file: /root/.commando/skills/AGENT.md [ok]
+bin on PATH: yes
+sui: present (+x)
+walrus: present (+x)
+site-builder: present (+x)
+LLM provider: OpenAI (model=gpt-4o-mini) - key configured
+doctor: all checks passed.
+```
+
+If `bin on PATH` is `NO`, open a new terminal (or `source ~/.bashrc` / `source ~/.zshrc`).
+
+## Where things live
+
+<Files>
+  <Folder name="~/.commando" defaultOpen>
+    <Folder name="bin" defaultOpen>
+      <File name="sui (or sui.exe)" />
+      <File name="walrus (or walrus.exe)" />
+      <File name="site-builder (or site-builder.exe)" />
+    </Folder>
+    <Folder name="skills">
+      <File name="AGENT.md" />
+    </Folder>
+    <Folder name="sandbox">
+      <Folder name="default" />
+    </Folder>
+    <Folder name="cache" />
+  </Folder>
+  <Folder name="~/.sui/sui_config">
+    <File name="client.yaml" />
+    <File name="sui.keystore" />
+  </Folder>
+  <Folder name="~/.config/walrus">
+    <File name="client_config.yaml" />
+    <File name="sites-config.yaml (manual, see below)" />
+  </Folder>
+</Files>
+
+<Callout type="info">
+  `~/.config/walrus/sites-config.yaml` is required by `site-builder` for Walrus Sites deploys but is **not** auto-bootstrapped in 0.2.4-beta. If you hit "could not find a valid sites configuration file", download the upstream sample and set `default_context: testnet`. Tracked for auto-bootstrap in a follow-up release.
+</Callout>
+
+## Re-running the install
+
+`cmdo bootstrap` is idempotent — it skips files that are already present and verified. Use it to:
+
+- Recover from a partial install (network drop mid-download).
+- Pick up a new binary version after upgrading the npm package.
+- Re-patch PATH after a fresh shell config.
+
+```bash
+cmdo bootstrap
+```
+
+To force a full re-download, delete `~/.commando/bin/` first.
+
+## Skipping the postinstall (CI / Docker)
+
+The 900 MB download is unwelcome in CI pipelines. Skip it with:
+
+```bash
+CMDO_SKIP_BOOTSTRAP=1 npm install -g sui-commando@beta
+```
+
+Then run `cmdo bootstrap` manually when (and where) you actually need the binaries — e.g., in a separate stage or only on the production runner.
+
+Any non-empty value other than `0` or `false` enables the skip.
+
+## Tuning the downloader
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `CMDO_DOWNLOAD_CONCURRENCY` | `3` | Parallel downloads. Lower on flaky networks. |
+| `CMDO_DOWNLOAD_IDLE_MS` | `120000` | Per-chunk idle timeout (ms). Increase on slow links. |
+| `CMDO_DOWNLOAD_RETRIES` | `3` | Attempts per file before giving up. |
+
+The downloader supports HTTP Range resume, so a half-finished `.part` file is reused on the next attempt.
+
+## Optional: R2 manifest mirror (advanced)
+
+By default, every install pulls binaries straight from upstream GitHub releases — no operator-owned mirror is involved. For CI mirrors, air-gapped enterprise installs, or future paid tiers we keep an opt-in R2 manifest path that adds **per-binary SHA256 provenance**.
+
+Enable it by setting **both** of these env vars (Windows only — the legacy R2 manifest only ever covered Windows):
+
+```bash
+export CMDO_MANIFEST_URL="https://your-r2-worker.example.com/object?key=manifests/commando-x.y.z.json"
+export CMDO_R2_TOKEN="<bearer-token-the-worker-accepts>"
+```
+
+When both are present, `npm install -g sui-commando@beta` fetches the manifest, verifies SHA256 per binary, and installs from there. When either is missing, the install transparently falls back to GitHub-direct.
+
+<Callout type="warn">
+  **No secrets are shipped inside the npm tarball.** If a token previously lived in `src/config/defaults.ts`, it has been removed and rotated. If you are re-using an old worker, generate a fresh secret and update `CMDO_R2_TOKEN` accordingly.
+</Callout>
+
+## Uninstall
+
+```bash
+npm uninstall -g sui-commando
+rm -rf ~/.commando        # binaries, skills, sandbox
+# Optional - if you don't use these CLIs elsewhere:
+rm -rf ~/.sui ~/.config/walrus
+```
+
+On Windows, also remove `%USERPROFILE%\.commando` and the PATH entry that the installer added (the registry edit is reversed on next `cmdo bootstrap` if you reinstall later).
+
+## Next
+
+<Cards>
+  <Card title="LLM Setup" description="Pick a provider, set a key, choose a model." href="/documentation/guides/llm-setup" icon="Sparkles" />
+  <Card title="Architecture" description="What postinstall actually does, in detail." href="/documentation/guides/architecture" icon="Layers" />
+  <Card title="Troubleshooting" description="Install errors and how to fix them." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
+
+---
+
+# LLM Setup (/guides\llm-setup)
+
+# LLM Setup
+
+Commando uses an LLM to plan each command. You can use **OpenAI**, **OpenRouter**, or skip the LLM entirely with the deterministic **mock planner**.
+
+## Quick decision
+
+<Cards>
+  <Card title="OpenAI" description="Best plan quality. Pay-as-you-go. Good default: gpt-4o-mini (cheap + fast)." icon="Sparkles" />
+  <Card title="OpenRouter" description="Single API for many models, including free tiers. Good default: z-ai/glm-4.5-air:free." icon="Layers" />
+  <Card title="Mock planner" description="No LLM call. Deterministic regex-based planning for the most common verbs. Useful for offline demos and CI." icon="ShieldCheck" />
+</Cards>
+
+## Interactive setup
+
+```bash
+cmdo init
+```
+
+This prompts you for:
+
+1. Provider — `openai` or `openrouter`.
+2. API key — pasted at the prompt, stored in `~/.commando/config.json`.
+3. Model — picked from a curated dropdown.
+
+Re-run `cmdo init` any time to switch providers or models.
+
+## Manual / env-only setup
+
+If you'd rather not store the key on disk, set env vars and skip `cmdo init`. Commando looks for env vars **before** falling back to `~/.commando/config.json`.
+
+<Tabs items={["OpenAI", "OpenRouter"]}>
+  <Tab value="OpenAI">
+    ```bash
+    export OPENAI_API_KEY=sk-...
+    export OPENAI_MODEL=gpt-4o-mini   # optional, defaults to gpt-4o-mini
+    ```
+  </Tab>
+  <Tab value="OpenRouter">
+    ```bash
+    export OPENROUTER_API_KEY=sk-or-...
+    export OPENROUTER_MODEL=z-ai/glm-4.5-air:free   # optional
+    ```
+  </Tab>
+</Tabs>
+
+On Windows PowerShell:
+
+```powershell
+$env:OPENAI_API_KEY = "sk-..."
+$env:OPENAI_MODEL   = "gpt-4o-mini"
+```
+
+## Curated OpenAI models
+
+The `cmdo init` picker keeps the list tight (one screen). Power users can override via `OPENAI_MODEL`.
+
+| ID | Note |
+|---|---|
+| `gpt-4o` | Flagship, best for complex plans |
+| `gpt-4o-mini` | Cheap + fast, good default |
+| `gpt-4.1` | Next-gen flagship |
+| `gpt-4.1-mini` | Smaller 4.1 tier |
+| `o3-mini` | Reasoning model |
+| `o4-mini` | Newer reasoning model |
+
+**Default:** `gpt-4o-mini`.
+
+## OpenRouter
+
+OpenRouter exposes a single OpenAI-compatible endpoint that proxies to dozens of providers. The default model `z-ai/glm-4.5-air:free` works without spend, which makes it ideal for first-run testing.
+
+**Default:** `z-ai/glm-4.5-air:free`.
+
+Override with `OPENROUTER_MODEL` (e.g. `anthropic/claude-3.5-sonnet`, `openai/gpt-4o-mini`, `meta-llama/llama-3.1-70b-instruct`).
+
+## How Commando uses the LLM
+
+The planner sends a hard-rules system prompt plus a **scoped** slice of `AGENT.md` (only the section for the routed binary). It expects a single JSON object back:
+
+```json
+{
+  "binary": "sui",
+  "args": ["client", "active-address"]
+}
+```
+
+Output is parsed defensively (markdown fences, smart quotes, and surrounding prose are all tolerated). The plan is then validated against the allowlist built from `AGENT.md`:
+
+- `binary` must be one of `sui` / `walrus` / `site-builder` (with the platform-correct suffix).
+- The leading non-flag tokens of `args` must form a real command path.
+- Every flag must exist in the skill contract for that command path.
+
+A failed validation triggers a retry with a tighter hint instead of executing a hallucinated command.
+
+<Callout type="info">
+  Want to see the full system prompt and validation logic? Read `src/llm/planner.ts` in the [Commando repo](https://github.com/MystenLabs/sui-commando).
+</Callout>
+
+## Offline / demo mode
+
+Set `CMDO_LLM_MOCK=1` to bypass the LLM entirely:
+
+```bash
+CMDO_LLM_MOCK=1 cmdo "show sui client active address" --sui
+```
+
+The mock covers:
+
+- **Sui** — `client active-address`, `client active-env`, `client new-address`, `client gas`, `client switch --env`, `client publish`, `move build`, `move test`.
+- **Walrus** — `info`, `list-blobs`, `get-wal`, basic store/read scaffolding.
+- **Site-builder** — `deploy <DIRECTORY> --epochs <N>`, `sitemap`, `update`.
+
+Use it for hackathon demos, CI smoke tests, or to rule out the LLM as a source of bugs while debugging.
+
+## Cost notes
+
+- `gpt-4o-mini` typically costs less than $0.001 per planning call (the prompts are small — usually under 2 KB).
+- OpenRouter free tiers have rate limits; switch to a paid model if you hit them during a demo.
+- The planner makes **one** LLM call per `cmdo` invocation under happy path; one extra call per validation retry (max 2 retries by default).
+
+## Next
+
+<Cards>
+  <Card title="Safety" description="What gets blocked before reaching the LLM, and what gets blocked after." href="/documentation/guides/safety" icon="Lock" />
+  <Card title="Sui Cookbook" description="Copy-paste prompts for the most common Sui flows." href="/documentation/examples/sui-flows" icon="BookOpen" />
+  <Card title="Env Vars" description="Every CMDO_*, OPENAI_*, OPENROUTER_* variable in one place." href="/documentation/reference/env-vars" icon="Settings" />
+</Cards>
+
+---
+
+# Safety (/guides\safety)
+
+# Safety
+
+Commando assumes the user is a developer, not an adversary — but it also assumes the LLM occasionally produces nonsense. The safety gate runs **twice** to keep both human typos and model hallucinations out of `spawn`.
+
+## The two layers
+
+```mermaid
+flowchart LR
+    P[User Prompt] --> P1{Pre-LLM\nPROMPT_PATTERNS}
+    P1 -- match --> X1[Block + reason]
+    P1 -- ok --> L[LLM Planner]
+    L --> A[Planned args]
+    A --> P2{Post-LLM\nARG_PATTERNS}
+    P2 -- match --> X2[Block + reason]
+    P2 -- ok --> AL{Allowlist\n binary in ~/.commando/bin}
+    AL -- fail --> X3[Block]
+    AL -- ok --> E[Execute]
+```
+
+### Layer 1 — Pre-LLM prompt screen
+
+`PROMPT_PATTERNS` matches the **raw user input** before it reaches a third-party API. Catches things like:
+
+- `delete everything in C drive`, `format C:`, `del C:\\`
+- `rm -rf /`, `rm -rf ~`, `rm -rf ~/.ssh`
+- `mkfs`, `dd if=/dev/zero`, `:(){ :|:& };:` (fork bomb)
+- `shutdown /s`, `shutdown -h now`, `reboot`
+- Prompts attempting to exfiltrate keys (`cat ~/.ssh/id_rsa`, `print my private key`)
+
+Blocked prompts never leave your machine.
+
+### Layer 2 — Post-LLM arg screen
+
+`ARG_PATTERNS` matches the LLM-emitted `args` array. Catches the case where a benign-looking prompt is misinterpreted into a destructive command, or where a prompt-injection payload smuggled past Layer 1 emerges as an explicit destructive arg.
+
+Both layers share most patterns but use different anchoring (free text vs. tokenized argv).
+
+### Structural allowlist
+
+Independent of the pattern matchers:
+
+- `binary` must resolve to a real file inside `~/.commando/bin/`.
+- The command path (leading non-flag tokens) must be in the allowlist generated from `~/.commando/skills/AGENT.md`.
+- Every flag must exist in the skill contract for that command path.
+
+Any failure short-circuits before `spawn`.
+
+## What you'll see when it fires
+
+```text
+$ cmdo "delete everything in C drive"
+[safety] Prompt blocked by safety policy
+[safety] reason: matches PROMPT_PATTERNS rule "destructive intent: delete everything in <drive>"
+[safety] hint: Commando does not execute prompts that look like destructive system actions.
+         If you really meant to do this, run the underlying command directly.
+```
+
+Exit code: `non-zero`. No LLM call is made for Layer 1 blocks; no `spawn` is made for Layer 2 blocks.
+
+## Extending the patterns
+
+The patterns live in `src/safety/gate.ts`:
+
+```ts
+// Pseudocode — see the real file for the full list.
+export const PROMPT_PATTERNS = [
+  { re: /\b(rm|del)\s+-?r?f?\s+(\/|c:\\)/i, reason: 'destructive intent: ...' },
+  { re: /\bformat\s+[a-z]:/i,               reason: '...' },
+  // ...
+];
+
+export const ARG_PATTERNS = [
+  { re: /^--?force(-?yes)?$/i,              reason: 'forced destructive flag' },
+  // ...
+];
+```
+
+To add a rule:
+
+1. Add an entry to `PROMPT_PATTERNS` and/or `ARG_PATTERNS` with a clear `reason` (it's surfaced to the user).
+2. Add a unit test in `tests/safety/` covering both the positive case (must block) and a negative case (must not over-block).
+3. Run `npm test` to make sure existing prompts still plan as before.
+
+## What the gate does **not** do
+
+- It does **not** rate-limit or throttle. If an LLM returns the same wrong plan 100 times, you'll get 100 retries (capped at the validator's max retries).
+- It does **not** sandbox the spawned process. `sui` and `walrus` run with your user's full privileges. Use a dedicated user / container if that matters.
+- It does **not** scan binary outputs for secrets. Streamed stdout/stderr go to your terminal verbatim.
+- It does **not** parse Move source code for malicious constructs. The gate is at the CLI layer, not the application layer.
+
+## Disabling (don't)
+
+There is no kill switch for the safety gate in 0.2.4-beta — the worst case is a noisy false positive that you can route around by running the underlying CLI directly. If you have a legitimate reason for a `cmdo --i-know-what-im-doing` mode, file an issue with your use case.
+
+## Related
+
+<Cards>
+  <Card title="Architecture" description="Where the gate sits in the request pipeline." href="/documentation/guides/architecture" icon="Layers" />
+  <Card title="Troubleshooting" description="How to tell a safety block from a runtime failure." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
+
+---
+
+# Troubleshooting (/guides\troubleshooting)
+
+# Troubleshooting
+
+Commando tries to fail loudly with a hint, not silently with a stack trace. Each entry below shows the **error you see**, the **root cause**, and the **fix**.
+
+## Install / bootstrap
+
+### `bin on PATH: NO` after install
+
+**Cause:** Your shell session was started before the installer patched `~/.bashrc` / `~/.zshrc` / Windows registry.
+
+**Fix:** Open a new terminal. On Linux/macOS you can also `source ~/.bashrc` (or `~/.zshrc`).
+
+---
+
+### `cmdo: command not found`
+
+**Cause:** The `npm install -g sui-commando@beta` step failed silently, or the global npm bin directory is not on your PATH.
+
+**Fix:**
+
+```bash
+npm bin -g                    # show the global bin path
+echo $PATH | tr ':' '\n'      # check it is there
+npm install -g sui-commando@beta --foreground-scripts   # retry with visible output
+```
+
+---
+
+### `bootstrap failed but install continues`
+
+**Cause:** Network drop, firewall, or upstream GitHub release URL changed.
+
+**Fix:** `cmdo bootstrap` is idempotent and supports HTTP Range resume, so re-running it is cheap:
+
+```bash
+cmdo bootstrap
+```
+
+If the URL changed (rare; we pin tags), you'll need a Commando upgrade: `npm install -g sui-commando@beta`.
+
+---
+
+### `site-builder: missing` on Linux ARM
+
+**Cause:** Upstream `MystenLabs/walrus-sites` does not ship a `linux-aarch64` build. Commando skips it on purpose.
+
+**Fix:** Run Walrus Sites prompts on an x86_64 machine. Other Walrus operations (info, store, read) work fine on ARM.
+
+## Sui
+
+### `could not find SUI coins with sufficient balance`
+
+**Cause:** Wallet has less testnet SUI than the operation requires (typically ≥ 0.5 SUI for `site-builder deploy`).
+
+**Fix:**
+
+```bash
+cmdo "give me testnet sui from faucet"
+sui client gas    # confirm balance increased
+```
+
+If the faucet times out, wait 5-10s and retry; the public testnet faucet is rate-limited per address.
+
+---
+
+### `spawn /root/.commando/bin/sui.exe ENOENT`
+
+**Cause:** A pre-0.2.3-beta build hard-coded `sui.exe` on Linux. Upgrade.
+
+**Fix:**
+
+```bash
+npm install -g sui-commando@beta
+cmdo --version    # should be ≥ 0.2.4-beta
+```
+
+---
+
+### `cmdo "build my move package"` runs `sui client publish`
+
+**Cause:** Pre-0.2.3-beta planner conflated build/test/publish.
+
+**Fix:** Upgrade to 0.2.4-beta — the system prompt now disambiguates the verbs explicitly and the validator rejects the wrong path.
+
+## Walrus
+
+### `Error: could not find a valid Walrus configuration file`
+
+**Cause:** `~/.config/walrus/client_config.yaml` is missing. Either bootstrap was skipped (`CMDO_SKIP_BOOTSTRAP=1`) or the auto-fetch failed.
+
+**Fix:**
+
+```bash
+cmdo bootstrap
+# or, manually:
+mkdir -p ~/.config/walrus
+curl -L -o ~/.config/walrus/client_config.yaml https://docs.wal.app/setup/client_config.yaml
+```
+
+---
+
+### `Error: could not find WAL coins with sufficient balance`
+
+**Cause:** Either you have no WAL coins, or your Walrus context is `mainnet` but your coins are on `testnet` (or vice versa).
+
+**Fix:**
+
+```bash
+# 1. Check active context
+grep '^default_context' ~/.config/walrus/client_config.yaml
+# AND, if it exists:
+grep '^default_context' ~/.config/walrus/sites-config.yaml
+
+# 2. If needed, set both to testnet
+sed -i 's/^default_context: mainnet$/default_context: testnet/' ~/.config/walrus/sites-config.yaml
+
+# 3. Get WAL
+cmdo "get wal" --walrus
+```
+
+The runtime hint that prints this error includes the same checklist.
+
+## Site-builder
+
+### `Error: could not find a valid sites configuration file`
+
+**Cause:** `~/.config/walrus/sites-config.yaml` is missing. **Not** auto-bootstrapped in 0.2.4-beta (tracked for a follow-up).
+
+**Fix:**
+
+```bash
+mkdir -p ~/.config/walrus
+curl -L -o ~/.config/walrus/sites-config.yaml \
+  https://raw.githubusercontent.com/MystenLabs/walrus-sites/main/sites-config.yaml
+# Then make sure the context matches your wallet:
+sed -i 's/^default_context: mainnet$/default_context: testnet/' ~/.config/walrus/sites-config.yaml
+```
+
+---
+
+### `Error: missing <DIRECTORY>` from `site-builder deploy`
+
+**Cause:** The LLM omitted the positional directory argument.
+
+**Fix:** Be explicit in the prompt:
+
+```bash
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+# or directly:
+cmdo "run site-builder deploy --epochs 1 ./dist" --site-builder
+```
+
+The 0.2.4-beta system prompt includes hardened rules for positional arguments; if you see this in 0.2.4+, file an issue with the exact prompt.
+
+## LLM / planner
+
+### `LLM did not return valid JSON`
+
+**Cause:** The model produced prose-only output and the defensive parser couldn't extract a JSON object after the configured retries.
+
+**Fix:**
+
+1. Try a stronger model: `OPENAI_MODEL=gpt-4o cmdo "..."`.
+2. Re-phrase the prompt more concretely (verbs + objects, no rhetorical questions).
+3. Use the offline mock for known intents: `CMDO_LLM_MOCK=1 cmdo "..."`.
+
+---
+
+### `Plan validation failed: command 'sui client test-publish' not found in skills`
+
+**Cause:** The model hallucinated a subcommand that doesn't exist in the current `sui` CLI.
+
+**Fix:** This is the validator working as intended — the planner will retry with a tighter hint. If it persists across retries:
+
+```bash
+cmdo update-skills    # in case the contract is stale
+cmdo "..." --sui      # add explicit routing flag to narrow the prompt scope
+```
+
+## Safety gate
+
+### `Prompt blocked by safety policy`
+
+**Cause:** Your prompt matched a `PROMPT_PATTERNS` rule (Layer 1) — destructive intent, key exfiltration attempt, etc.
+
+**Fix:** Read the printed `reason`. If you genuinely need to do that destructive operation, run the underlying command directly — Commando doesn't execute prompts that look like system-wipe requests.
+
+False positive? File an issue with the exact prompt and the matched rule name; we'll narrow the regex.
+
+## Diagnostics
+
+When in doubt:
+
+```bash
+cmdo doctor
+```
+
+This prints:
+
+- Node version and platform.
+- `~/.commando/bin/` path and PATH membership.
+- Per-binary status (`present (+x)` / `present` / `sha256 ok` / `missing`).
+- LLM provider, model, and whether the key is configured.
+- `CMDO_LLM_MOCK` setting.
+
+Attach the full `cmdo doctor` output when filing an issue.
+
+## Still stuck?
+
+<Cards>
+  <Card title="GitHub Issues" description="Search existing issues or file a new one with cmdo doctor output." href="https://github.com/MystenLabs/sui-commando/issues" icon="MessageSquare" />
+  <Card title="Architecture" description="Understand the layer that's failing before debugging." href="/documentation/guides/architecture" icon="Layers" />
+  <Card title="CLI Reference" description="Confirm the subcommand and flag you expect actually exist." href="/documentation/reference/cli" icon="Terminal" />
+</Cards>
+
+---
+
+# Validate (/guides\validate)
+
+# Validate
+
+`cmdocs check` is a fast, CI-friendly lint that catches the mistakes most likely to break your docs site. Run it locally before committing and wire it into CI so broken pages never reach `main`.
+
+## What it checks
+
+| Check | Example failure |
+|---|---|
+| **docs.json schema** | `name is required` · `Expected hex color (#RRGGBB)` · unknown field |
+| **Duplicate tab paths** | Two tabs both resolve to `/api` — hard error |
+| **Duplicate page files** | The same `.mdx` file listed under two groups |
+| **Navigation → MDX** | `Missing MDX: guides/setup.mdx (referenced in "Documentation" > "Guides")` |
+| **MDX frontmatter** | `Missing frontmatter "title" in: quickstart.mdx` |
+| **Assets** | `Missing logo: public/logo/dark.svg` |
+| **Internal links** | `Broken link in index.mdx:42: "/documentation/missing-page"` |
+
+Exit code `0` means you're clean. Exit code `1` prints every failure with a file and line number, suitable for a terminal or CI log.
+
+## Run it locally
+
+```bash
+npx cmdocs check
+```
+
+Point at a specific source directory if your docs aren't at the repo root:
+
+```bash
+npx cmdocs check --source ./docs
+```
+
+### Sample output
+
+**All checks pass:**
+
+```
+ℹ Checking docs.json...
+✓ Loaded "My Documentation"
+ℹ Checking navigation references...
+ℹ Checking MDX frontmatter...
+ℹ Checking assets...
+ℹ Checking internal links...
+✓ All checks passed
+```
+
+**A broken link:**
+
+```
+ℹ Checking internal links...
+✖ Broken link in guides/writing-content.mdx:42: "/documentation/missing-page"
+✖ 1 error found
+```
+
+## Pre-commit hook (recommended)
+
+Block bad commits before they happen. Pick whichever style fits your project.
+
+### Option 1 — Native git hook (zero dependencies)
+
+Create `.git/hooks/pre-commit` (or use [a tracked hooks folder](https://git-scm.com/docs/githooks#_description) via `git config core.hooksPath`):
+
+```bash
+#!/usr/bin/env bash
+npx cmdocs check
+```
+
+Make it executable:
+
+```bash
+chmod +x .git/hooks/pre-commit
+```
+
+### Option 2 — Husky (tracked in git)
+
+If you already use [Husky](https://typicode.github.io/husky/), add cmdocs check to the pre-commit hook:
+
+```bash
+npx husky init
+echo 'npx cmdocs check' >> .husky/pre-commit
+```
+
+Commit `.husky/pre-commit` — every contributor who runs `npm install` gets the hook automatically.
+
+<Callout type="info">
+  `cmdocs check` runs the full validation in well under a second for typical docs sites. Keep it in pre-commit — it's faster than running the type-checker.
+</Callout>
+
+## CI validation
+
+Add a validation step on every pull request so broken docs can't merge.
+
+### GitHub Actions
+
+```yaml title=".github/workflows/docs.yml"
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - "**/*.mdx"
+      - "docs.json"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npx cmdocs check
+```
+
+### GitLab CI
+
+```yaml title=".gitlab-ci.yml"
+docs-check:
+  image: node:20
+  script:
+    - npx cmdocs check
+  rules:
+    - changes:
+        - "**/*.mdx"
+        - "docs.json"
+```
+
+## Troubleshooting
+
+<Accordions>
+  <Accordion title="An asset exists but check says it's missing">
+    `cmdocs check` looks for assets under `public/`. If your favicon is at `public/favicon.svg`, set `"favicon": "/favicon.svg"` (leading slash, no `public/` prefix) in `docs.json`.
+  </Accordion>
+  <Accordion title="A link is valid but check flags it as broken">
+    Internal links must match a page URL exactly. Tab-prefixed URLs need the tab `path`: a page with `file: "quickstart"` inside a tab with `path: "documentation"` lives at `/documentation/quickstart`, not `/quickstart`. Hash fragments (`/documentation/quickstart#section`) are stripped before validation, so those always pass.
+  </Accordion>
+  <Accordion title="I need to skip a specific check">
+    There is no skip flag — every failure is actionable. If you hit a false positive (e.g. a reference to an asset you know exists outside `public/`), open an issue with the reproducer.
+  </Accordion>
+  <Accordion title="My docs use shorthand `tab` / `group` / string pages">
+    Those still work but emit a deprecation warning on every run. Migrate to `label` + `path` on tabs and groups, and object-form pages `{ "file": "..." }` — see [Writing Content](/documentation/guides/writing-content).
+  </Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Deploy" description="Push to the cmdocs dashboard and go live." href="/documentation/guides/deploy" icon="Cloud" />
+  <Card title="Writing Content" description="MDX basics and frontmatter reference." href="/documentation/guides/writing-content" icon="PencilLine" />
+</Cards>
+
+---
+
+# Writing Content (/guides\writing-content)
+
+# Writing Content
+
+cmdocs uses [MDX](https://mdxjs.com/) — a format that lets you use components inside Markdown. All built-in components are auto-imported, so you never need to write `import` statements.
+
+## Frontmatter
+
+Every page starts with a YAML frontmatter block at the top of the file:
+
+```yaml
+---
+title: Page Title
+description: A short description of the page.
+---
+```
+
+<TypeTable
+  type={{
+    title: { description: "Page title — shown in the heading and sidebar.", type: "string", required: true },
+    description: { description: "Page description — used for SEO meta tags and search results.", type: "string" },
+    icon: { description: "Lucide icon name shown next to the page in the sidebar.", type: "string" },
+    full: { description: "Hide the table of contents and use a full-width layout.", type: "boolean", default: "false" },
+  }}
+/>
+
+<Callout type="info">
+  **SEO tips**
+  - Keep `description` under 160 characters — longer descriptions get truncated in search results.
+  - Use a concrete verb in the `title` (e.g. "Install the CLI" not just "Installation") so search snippets read well.
+  - Add a global `seo.ogImage` in `docs.json` to set the default social preview image; override per-page later when you add one.
+</Callout>
+
+## Markdown basics
+
+All standard Markdown features work as you'd expect.
+
+### Text formatting
+
+```md
+**Bold**, *italic*, ~~strikethrough~~, and `inline code`.
+```
+
+### Links
+
+```md
+[External link](https://example.com)
+[Internal link](/documentation/quickstart)
+```
+
+Internal links use absolute paths starting from the site root.
+
+### Lists
+
+```md
+- Unordered item
+- Another item
+  - Nested item
+
+1. Ordered item
+2. Another item
+```
+
+### Blockquotes
+
+```md
+> A quote.
+> Spans multiple lines.
+```
+
+### Code blocks
+
+Use fenced code blocks with a language identifier for syntax highlighting:
+
+````md
+```typescript
+function greet(name: string): string {
+  return `Hello, ${name}!`;
+}
+```
+````
+
+You can also add a `title` to the block:
+
+````md
+```ts title="src/greet.ts"
+export const greet = (name: string) => `Hello, ${name}!`;
+```
+````
+
+### Tables
+
+```md
+| Column 1 | Column 2 |
+|----------|----------|
+| Cell A   | Cell B   |
+| Cell C   | Cell D   |
+```
+
+### Images
+
+Place images in the `public/` folder and reference them with an absolute path. `public/logo/light.svg` is served at `/logo/light.svg`:
+
+```md
+![My logo](/logo/light.svg)
+```
+
+For full-size images, put them under `public/images/` and reference with the matching path:
+
+```md
+![Architecture diagram](/images/architecture.png)
+```
+
+All images are zoomable — click any image to expand it.
+
+## JSX components
+
+The point of MDX is using components inline. Just type the component — no import needed:
+
+```mdx
+<Callout type="info">
+  This is an informational callout.
+</Callout>
+```
+
+<Callout type="info">
+  This is an informational callout.
+</Callout>
+
+See [Components](/documentation/guides/components) for the full list with examples.
+
+## Tips
+
+<Accordions>
+  <Accordion title="Where do new pages go?">
+    Anywhere under your project root. Then add the page as an object to `docs.json` under the appropriate `pages` array:
+
+    ```json
+    { "file": "guides/my-new-page" }
+    ```
+
+    The `file` field is the MDX path without `.mdx`. Add `path` to override the URL or `label` to override the sidebar display.
+  </Accordion>
+  <Accordion title="Can I nest pages in folders?">
+    Yes. A file at `guides/setup.mdx` declared as `{ "file": "guides/setup" }` lives at the URL `/documentation/guides/setup` (where `documentation` is the tab `path`).
+  </Accordion>
+  <Accordion title="How do I link between pages?">
+    Use a Markdown link with the absolute URL: `[Deploy guide](/documentation/guides/deploy)`. `cmdocs check` validates every internal link — broken links fail the check.
+  </Accordion>
+  <Accordion title="Can I hide the table of contents on a page?">
+    Yes — set `full: true` in the page's frontmatter.
+  </Accordion>
+  <Accordion title="Where do I put images?">
+    In `public/`. Anything there is served at the matching URL — `public/images/hero.png` becomes `/images/hero.png`. SVG is preferred for logos and diagrams (sharper on retina, smaller payload).
+  </Accordion>
+</Accordions>
+
+## Next
+
+<Cards>
+  <Card title="Components" description="Every built-in component, with examples." href="/documentation/guides/components" icon="Layers" />
+  <Card title="Validate" description="Catch typos and broken links before committing." href="/documentation/guides/validate" icon="ShieldCheck" />
+  <Card title="Deploy" description="Push to the cmdocs dashboard." href="/documentation/guides/deploy" icon="Cloud" />
+</Cards>
+
+---
+
+# CLI Reference (/reference\cli)
+
+# CLI Reference
+
+`cmdo` is a Commander-based CLI. The default action takes a free-text prompt; the rest are reserved subcommand names.
+
+## Synopsis
+
+```text
+cmdo [subcommand]
+cmdo <prompt...> [--sui | --walrus | --site-builder]
+```
+
+## Global options
+
+| Option | Description |
+|---|---|
+| `-v`, `--version` | Print the installed version (e.g. `0.2.4-beta`). |
+| `-h`, `--help` | Print help. |
+
+## Subcommands
+
+### `cmdo init`
+
+Interactively configure the LLM provider, API key, and model.
+
+```bash
+cmdo init
+```
+
+Prompts:
+
+1. Provider — `openai` or `openrouter`.
+2. API key — pasted at the prompt; stored in `~/.commando/config.json`.
+3. Model — picked from a curated dropdown (or accept the default).
+
+Re-run any time to switch providers or models. Env vars (`OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_MODEL`, `OPENROUTER_MODEL`) override the stored config when present.
+
+### `cmdo doctor`
+
+Print environment status and verify installed binaries. **Read-only** — does not download or modify anything.
+
+```bash
+cmdo doctor
+```
+
+Output includes Node version, platform, install root, PATH membership, per-binary status, and LLM provider configuration. See [Troubleshooting](/documentation/guides/troubleshooting) for what to do when checks fail.
+
+Exit code: `0` if all checks pass, `1` otherwise.
+
+### `cmdo bootstrap`
+
+Download binaries, patch PATH, bootstrap external CLI configs, and (re)generate skills. **Idempotent** — safe to re-run.
+
+```bash
+cmdo bootstrap
+```
+
+Use this after a partial install (network drop), after upgrading the package, or to recover from a stale state. To force a full re-download, delete `~/.commando/bin/` first.
+
+### `cmdo update-skills`
+
+Regenerate `~/.commando/skills/AGENT.md` from the currently installed binaries' `--help` output.
+
+```bash
+cmdo update-skills
+```
+
+Run this after any of the upstream binaries change versions — the LLM planner is constrained to the contract in `AGENT.md`, so a stale contract means stale plans.
+
+### `cmdo <prompt...>`
+
+The default action. Anything that isn't a known subcommand is treated as a natural-language prompt.
+
+```bash
+cmdo "show sui client active address"
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+cmdo create new sui address     # quotes are optional for simple prompts
+```
+
+#### Routing flags
+
+If multiple are passed, the first one wins.
+
+| Flag | Forces |
+|---|---|
+| `--sui` | Plan against the `sui` binary skill section only. |
+| `--walrus` | Plan against the `walrus` binary skill section only. |
+| `--site-builder` | Plan against the `site-builder` binary skill section only. |
+
+When no flag is passed, the router infers the target from prompt keywords. Always pass the explicit flag in scripts and demos for predictability.
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Plan succeeded, executed, and exited 0. |
+| `1` | Generic failure (LLM error, validation failure, spawn failure, exec non-zero). |
+| `>1` | Underlying binary's exit code is propagated. |
+
+## Examples
+
+### Wallet
+
+```bash
+cmdo "create new sui address"
+cmdo "show sui client active address" --sui
+cmdo "switch to testnet" --sui
+cmdo "give me testnet sui from faucet"
+```
+
+### Move
+
+```bash
+cmdo "build my move package"
+cmdo "test my move package"
+cmdo "publish my move package to testnet"
+```
+
+### Walrus
+
+```bash
+cmdo "show walrus info" --walrus
+cmdo "get wal" --walrus
+cmdo "list my blobs" --walrus
+```
+
+### Walrus Sites
+
+```bash
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+cmdo "run site-builder deploy --epochs 1 ./dist" --site-builder
+cmdo "show sitemap for site 0x..." --site-builder
+```
+
+## Where the binary lives
+
+| OS | Path |
+|---|---|
+| Windows | `%APPDATA%\npm\cmdo.cmd` (npm global bin) → `%USERPROFILE%\.commando\bin\` for upstream binaries |
+| Linux / macOS | `$(npm bin -g)/cmdo` → `~/.commando/bin/` for upstream binaries |
+
+## Related
+
+<Cards>
+  <Card title="Env Vars" description="Every environment variable cmdo reads." href="/documentation/reference/env-vars" icon="Settings" />
+  <Card title="LLM Setup" description="Provider, key, and model details for cmdo init." href="/documentation/guides/llm-setup" icon="Sparkles" />
+  <Card title="Troubleshooting" description="When a subcommand misbehaves." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
+
+---
+
+# Environment Variables (/reference\env-vars)
+
+# Environment Variables
+
+All variables are read at process start. There is no live reload — change the env, then re-run `cmdo`.
+
+## Installer
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CMDO_SKIP_BOOTSTRAP` | unset | Any non-empty value other than `0` / `false` skips the postinstall download. Use `cmdo bootstrap` later. |
+| `CMDO_DOWNLOAD_CONCURRENCY` | `3` | Parallel downloads during bootstrap. Lower on flaky networks. |
+| `CMDO_DOWNLOAD_IDLE_MS` | `120000` | Per-chunk idle timeout in milliseconds. Increase for slow links. |
+| `CMDO_DOWNLOAD_RETRIES` | `3` | Attempts per file before giving up. |
+
+## Optional R2 manifest mirror (Windows only)
+
+The R2 path is **off by default**. Set both vars to enable. When either is missing, the install falls back to GitHub-direct.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CMDO_MANIFEST_URL` | unset | Full URL to the manifest JSON in R2 (or any compatible mirror). |
+| `CMDO_R2_TOKEN` | unset | Bearer/header token the worker accepts. |
+
+<Callout type="warn">
+  No secret is shipped inside the npm tarball — both halves must come from the operator's environment. See [Installation](/documentation/guides/installation) for the security rationale.
+</Callout>
+
+## LLM provider
+
+Env vars override the values stored by `cmdo init` in `~/.commando/config.json`.
+
+### OpenAI
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENAI_API_KEY` | unset | Required if provider is OpenAI and no config file exists. |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Override the model. Any string accepted by the OpenAI API. |
+
+### OpenRouter
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENROUTER_API_KEY` | unset | Required if provider is OpenRouter and no config file exists. |
+| `OPENROUTER_MODEL` | `z-ai/glm-4.5-air:free` | Override the model. Any string accepted by OpenRouter. |
+
+## Planner
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CMDO_LLM_MOCK` | `0` | Set to `1` to bypass the LLM and use the deterministic regex-based mock planner. Useful for offline demos and CI. |
+
+## Logging
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CMDO_LOG_LEVEL` | `info` | One of `debug`, `info`, `warn`, `error`. `debug` adds raw LLM input/output and validator decisions. |
+| `NO_COLOR` | unset | Standard env: any non-empty value disables ANSI colors. |
+
+## Examples
+
+### CI build that defers the binary download
+
+```bash
+CMDO_SKIP_BOOTSTRAP=1 npm install -g sui-commando@beta
+# ... later, only on the runner that needs the CLIs:
+cmdo bootstrap
+```
+
+### Air-gapped install pulling from a private R2 mirror
+
+```powershell
+# Windows PowerShell
+$env:CMDO_MANIFEST_URL = "https://r2.internal/object?key=manifests/commando-0.2.4-beta.json"
+$env:CMDO_R2_TOKEN     = "<bearer-token-the-worker-accepts>"
+npm install -g sui-commando@beta
+```
+
+### Prefer env-only LLM setup (no `cmdo init`)
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+export OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
+cmdo "show walrus info" --walrus
+```
+
+### Offline hackathon demo
+
+```bash
+CMDO_LLM_MOCK=1 cmdo "show sui client active address" --sui
+```
+
+## Related
+
+<Cards>
+  <Card title="CLI Reference" description="Every cmdo subcommand and flag." href="/documentation/reference/cli" icon="Terminal" />
+  <Card title="Installation" description="When and why each installer var matters." href="/documentation/guides/installation" icon="Download" />
+  <Card title="LLM Setup" description="Provider/model decision tree." href="/documentation/guides/llm-setup" icon="Sparkles" />
+</Cards>

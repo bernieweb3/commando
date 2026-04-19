@@ -1,0 +1,219 @@
+---
+title: Troubleshooting
+description: 'Common errors, what they mean, and the runtime hints Commando prints for them.'
+---
+
+# Troubleshooting
+
+Commando tries to fail loudly with a hint, not silently with a stack trace. Each entry below shows the **error you see**, the **root cause**, and the **fix**.
+
+## Install / bootstrap
+
+### `bin on PATH: NO` after install
+
+**Cause:** Your shell session was started before the installer patched `~/.bashrc` / `~/.zshrc` / Windows registry.
+
+**Fix:** Open a new terminal. On Linux/macOS you can also `source ~/.bashrc` (or `~/.zshrc`).
+
+---
+
+### `cmdo: command not found`
+
+**Cause:** The `npm install -g sui-commando@beta` step failed silently, or the global npm bin directory is not on your PATH.
+
+**Fix:**
+
+```bash
+npm bin -g                    # show the global bin path
+echo $PATH | tr ':' '\n'      # check it is there
+npm install -g sui-commando@beta --foreground-scripts   # retry with visible output
+```
+
+---
+
+### `bootstrap failed but install continues`
+
+**Cause:** Network drop, firewall, or upstream GitHub release URL changed.
+
+**Fix:** `cmdo bootstrap` is idempotent and supports HTTP Range resume, so re-running it is cheap:
+
+```bash
+cmdo bootstrap
+```
+
+If the URL changed (rare; we pin tags), you'll need a Commando upgrade: `npm install -g sui-commando@beta`.
+
+---
+
+### `site-builder: missing` on Linux ARM
+
+**Cause:** Upstream `MystenLabs/walrus-sites` does not ship a `linux-aarch64` build. Commando skips it on purpose.
+
+**Fix:** Run Walrus Sites prompts on an x86_64 machine. Other Walrus operations (info, store, read) work fine on ARM.
+
+## Sui
+
+### `could not find SUI coins with sufficient balance`
+
+**Cause:** Wallet has less testnet SUI than the operation requires (typically ≥ 0.5 SUI for `site-builder deploy`).
+
+**Fix:**
+
+```bash
+cmdo "give me testnet sui from faucet"
+sui client gas    # confirm balance increased
+```
+
+If the faucet times out, wait 5-10s and retry; the public testnet faucet is rate-limited per address.
+
+---
+
+### `spawn /root/.commando/bin/sui.exe ENOENT`
+
+**Cause:** A pre-0.2.3-beta build hard-coded `sui.exe` on Linux. Upgrade.
+
+**Fix:**
+
+```bash
+npm install -g sui-commando@beta
+cmdo --version    # should be ≥ 0.2.4-beta
+```
+
+---
+
+### `cmdo "build my move package"` runs `sui client publish`
+
+**Cause:** Pre-0.2.3-beta planner conflated build/test/publish.
+
+**Fix:** Upgrade to 0.2.4-beta — the system prompt now disambiguates the verbs explicitly and the validator rejects the wrong path.
+
+## Walrus
+
+### `Error: could not find a valid Walrus configuration file`
+
+**Cause:** `~/.config/walrus/client_config.yaml` is missing. Either bootstrap was skipped (`CMDO_SKIP_BOOTSTRAP=1`) or the auto-fetch failed.
+
+**Fix:**
+
+```bash
+cmdo bootstrap
+# or, manually:
+mkdir -p ~/.config/walrus
+curl -L -o ~/.config/walrus/client_config.yaml https://docs.wal.app/setup/client_config.yaml
+```
+
+---
+
+### `Error: could not find WAL coins with sufficient balance`
+
+**Cause:** Either you have no WAL coins, or your Walrus context is `mainnet` but your coins are on `testnet` (or vice versa).
+
+**Fix:**
+
+```bash
+# 1. Check active context
+grep '^default_context' ~/.config/walrus/client_config.yaml
+# AND, if it exists:
+grep '^default_context' ~/.config/walrus/sites-config.yaml
+
+# 2. If needed, set both to testnet
+sed -i 's/^default_context: mainnet$/default_context: testnet/' ~/.config/walrus/sites-config.yaml
+
+# 3. Get WAL
+cmdo "get wal" --walrus
+```
+
+The runtime hint that prints this error includes the same checklist.
+
+## Site-builder
+
+### `Error: could not find a valid sites configuration file`
+
+**Cause:** `~/.config/walrus/sites-config.yaml` is missing. **Not** auto-bootstrapped in 0.2.4-beta (tracked for a follow-up).
+
+**Fix:**
+
+```bash
+mkdir -p ~/.config/walrus
+curl -L -o ~/.config/walrus/sites-config.yaml \
+  https://raw.githubusercontent.com/MystenLabs/walrus-sites/main/sites-config.yaml
+# Then make sure the context matches your wallet:
+sed -i 's/^default_context: mainnet$/default_context: testnet/' ~/.config/walrus/sites-config.yaml
+```
+
+---
+
+### `Error: missing <DIRECTORY>` from `site-builder deploy`
+
+**Cause:** The LLM omitted the positional directory argument.
+
+**Fix:** Be explicit in the prompt:
+
+```bash
+cmdo "deploy static site in ./dist to walrus-sites" --site-builder
+# or directly:
+cmdo "run site-builder deploy --epochs 1 ./dist" --site-builder
+```
+
+The 0.2.4-beta system prompt includes hardened rules for positional arguments; if you see this in 0.2.4+, file an issue with the exact prompt.
+
+## LLM / planner
+
+### `LLM did not return valid JSON`
+
+**Cause:** The model produced prose-only output and the defensive parser couldn't extract a JSON object after the configured retries.
+
+**Fix:**
+
+1. Try a stronger model: `OPENAI_MODEL=gpt-4o cmdo "..."`.
+2. Re-phrase the prompt more concretely (verbs + objects, no rhetorical questions).
+3. Use the offline mock for known intents: `CMDO_LLM_MOCK=1 cmdo "..."`.
+
+---
+
+### `Plan validation failed: command 'sui client test-publish' not found in skills`
+
+**Cause:** The model hallucinated a subcommand that doesn't exist in the current `sui` CLI.
+
+**Fix:** This is the validator working as intended — the planner will retry with a tighter hint. If it persists across retries:
+
+```bash
+cmdo update-skills    # in case the contract is stale
+cmdo "..." --sui      # add explicit routing flag to narrow the prompt scope
+```
+
+## Safety gate
+
+### `Prompt blocked by safety policy`
+
+**Cause:** Your prompt matched a `PROMPT_PATTERNS` rule (Layer 1) — destructive intent, key exfiltration attempt, etc.
+
+**Fix:** Read the printed `reason`. If you genuinely need to do that destructive operation, run the underlying command directly — Commando doesn't execute prompts that look like system-wipe requests.
+
+False positive? File an issue with the exact prompt and the matched rule name; we'll narrow the regex.
+
+## Diagnostics
+
+When in doubt:
+
+```bash
+cmdo doctor
+```
+
+This prints:
+
+- Node version and platform.
+- `~/.commando/bin/` path and PATH membership.
+- Per-binary status (`present (+x)` / `present` / `sha256 ok` / `missing`).
+- LLM provider, model, and whether the key is configured.
+- `CMDO_LLM_MOCK` setting.
+
+Attach the full `cmdo doctor` output when filing an issue.
+
+## Still stuck?
+
+<Cards>
+  <Card title="GitHub Issues" description="Search existing issues or file a new one with cmdo doctor output." href="https://github.com/MystenLabs/sui-commando/issues" icon="MessageSquare" />
+  <Card title="Architecture" description="Understand the layer that's failing before debugging." href="/documentation/guides/architecture" icon="Layers" />
+  <Card title="CLI Reference" description="Confirm the subcommand and flag you expect actually exist." href="/documentation/reference/cli" icon="Terminal" />
+</Cards>

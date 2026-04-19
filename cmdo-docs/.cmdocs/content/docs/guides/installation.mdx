@@ -1,0 +1,170 @@
+---
+title: Installation
+description: >-
+  Cross-platform install details, PATH patching, auto-bootstrapped configs, and
+  the optional R2 mirror.
+---
+import { Callout } from 'fumadocs-ui/components/callout';
+import { File, Files, Folder } from 'fumadocs-ui/components/files';
+
+
+# Installation
+
+Commando is shipped as a single npm package, `sui-commando`, that runs on Windows, Linux, and macOS. The `postinstall` hook handles binary downloads, PATH patching, and external CLI config bootstrap.
+
+## Supported platforms
+
+| OS | Arch | `sui` | `walrus` | `site-builder` |
+|---|---|---|---|---|
+| Windows | x86_64 | Yes | Yes | Yes |
+| Linux | x86_64 | Yes | Yes | Yes |
+| Linux | aarch64 | Yes | Yes | **Skipped** (no upstream build) |
+| macOS | x86_64 (Intel) | Yes | Yes | Yes |
+| macOS | arm64 (Apple Silicon) | Yes | Yes | Yes |
+
+<Callout type="warn">
+  On `linux-aarch64` the upstream `MystenLabs/walrus-sites` release does not ship a binary, so `site-builder` is skipped gracefully. Walrus Sites prompts will fail with a clear message; deploy from an x86_64 machine instead.
+</Callout>
+
+## Install
+
+```bash
+npm install -g sui-commando@beta
+```
+
+That's it. The hook will:
+
+1. Detect OS + arch (`bootstrap/platform.ts`).
+2. Download `.tgz` archives directly from the upstream Mysten Labs GitHub releases.
+3. Extract them with the system `tar` and set the executable bit on Unix.
+4. Patch your shell PATH (Windows registry; `~/.bashrc` / `~/.zshrc` / `~/.bash_profile` / `~/.profile` on Unix).
+5. Bootstrap the Sui wallet (`~/.sui/sui_config/client.yaml`) and Walrus client config (`~/.config/walrus/client_config.yaml`, testnet default).
+6. Generate `~/.commando/skills/AGENT.md` from each binary's `--help` output.
+
+## Verify
+
+```bash
+cmdo doctor
+```
+
+Expected output (Linux example):
+
+```text
+node: v20.x
+platform: linux-x86_64
+cpu: <model>
+install root: /root/.commando
+bin dir: /root/.commando/bin [ok]
+skills file: /root/.commando/skills/AGENT.md [ok]
+bin on PATH: yes
+sui: present (+x)
+walrus: present (+x)
+site-builder: present (+x)
+LLM provider: OpenAI (model=gpt-4o-mini) - key configured
+doctor: all checks passed.
+```
+
+If `bin on PATH` is `NO`, open a new terminal (or `source ~/.bashrc` / `source ~/.zshrc`).
+
+## Where things live
+
+<Files>
+  <Folder name="~/.commando" defaultOpen>
+    <Folder name="bin" defaultOpen>
+      <File name="sui (or sui.exe)" />
+      <File name="walrus (or walrus.exe)" />
+      <File name="site-builder (or site-builder.exe)" />
+    </Folder>
+    <Folder name="skills">
+      <File name="AGENT.md" />
+    </Folder>
+    <Folder name="sandbox">
+      <Folder name="default" />
+    </Folder>
+    <Folder name="cache" />
+  </Folder>
+  <Folder name="~/.sui/sui_config">
+    <File name="client.yaml" />
+    <File name="sui.keystore" />
+  </Folder>
+  <Folder name="~/.config/walrus">
+    <File name="client_config.yaml" />
+    <File name="sites-config.yaml (manual, see below)" />
+  </Folder>
+</Files>
+
+<Callout type="info">
+  `~/.config/walrus/sites-config.yaml` is required by `site-builder` for Walrus Sites deploys but is **not** auto-bootstrapped in 0.2.4-beta. If you hit "could not find a valid sites configuration file", download the upstream sample and set `default_context: testnet`. Tracked for auto-bootstrap in a follow-up release.
+</Callout>
+
+## Re-running the install
+
+`cmdo bootstrap` is idempotent — it skips files that are already present and verified. Use it to:
+
+- Recover from a partial install (network drop mid-download).
+- Pick up a new binary version after upgrading the npm package.
+- Re-patch PATH after a fresh shell config.
+
+```bash
+cmdo bootstrap
+```
+
+To force a full re-download, delete `~/.commando/bin/` first.
+
+## Skipping the postinstall (CI / Docker)
+
+The 900 MB download is unwelcome in CI pipelines. Skip it with:
+
+```bash
+CMDO_SKIP_BOOTSTRAP=1 npm install -g sui-commando@beta
+```
+
+Then run `cmdo bootstrap` manually when (and where) you actually need the binaries — e.g., in a separate stage or only on the production runner.
+
+Any non-empty value other than `0` or `false` enables the skip.
+
+## Tuning the downloader
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `CMDO_DOWNLOAD_CONCURRENCY` | `3` | Parallel downloads. Lower on flaky networks. |
+| `CMDO_DOWNLOAD_IDLE_MS` | `120000` | Per-chunk idle timeout (ms). Increase on slow links. |
+| `CMDO_DOWNLOAD_RETRIES` | `3` | Attempts per file before giving up. |
+
+The downloader supports HTTP Range resume, so a half-finished `.part` file is reused on the next attempt.
+
+## Optional: R2 manifest mirror (advanced)
+
+By default, every install pulls binaries straight from upstream GitHub releases — no operator-owned mirror is involved. For CI mirrors, air-gapped enterprise installs, or future paid tiers we keep an opt-in R2 manifest path that adds **per-binary SHA256 provenance**.
+
+Enable it by setting **both** of these env vars (Windows only — the legacy R2 manifest only ever covered Windows):
+
+```bash
+export CMDO_MANIFEST_URL="https://your-r2-worker.example.com/object?key=manifests/commando-x.y.z.json"
+export CMDO_R2_TOKEN="<bearer-token-the-worker-accepts>"
+```
+
+When both are present, `npm install -g sui-commando@beta` fetches the manifest, verifies SHA256 per binary, and installs from there. When either is missing, the install transparently falls back to GitHub-direct.
+
+<Callout type="warn">
+  **No secrets are shipped inside the npm tarball.** If a token previously lived in `src/config/defaults.ts`, it has been removed and rotated. If you are re-using an old worker, generate a fresh secret and update `CMDO_R2_TOKEN` accordingly.
+</Callout>
+
+## Uninstall
+
+```bash
+npm uninstall -g sui-commando
+rm -rf ~/.commando        # binaries, skills, sandbox
+# Optional - if you don't use these CLIs elsewhere:
+rm -rf ~/.sui ~/.config/walrus
+```
+
+On Windows, also remove `%USERPROFILE%\.commando` and the PATH entry that the installer added (the registry edit is reversed on next `cmdo bootstrap` if you reinstall later).
+
+## Next
+
+<Cards>
+  <Card title="LLM Setup" description="Pick a provider, set a key, choose a model." href="/documentation/guides/llm-setup" icon="Sparkles" />
+  <Card title="Architecture" description="What postinstall actually does, in detail." href="/documentation/guides/architecture" icon="Layers" />
+  <Card title="Troubleshooting" description="Install errors and how to fix them." href="/documentation/guides/troubleshooting" icon="LifeBuoy" />
+</Cards>
