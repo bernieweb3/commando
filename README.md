@@ -2,6 +2,8 @@
 
 > Natural-language CLI agent for the Sui ecosystem, Windows-first. Turn prompts into safe, grounded `sui` / `walrus` / `site-builder` commands.
 
+<iframe width="560" height="315" src="https://www.youtube.com/embed/dg0HFs1_ZzE?si=b6-rV5VgBDzavN9A" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 > **Heads up:** the first install downloads **~850 MB of Mysten Labs CLIs**
 > (sui, walrus, site-builder, and their service peers) into
 > `%USERPROFILE%\.commando`. Set `CMDO_SKIP_BOOTSTRAP=1` before installing if
