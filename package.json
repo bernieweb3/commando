@@ -1,0 +1,59 @@
+{
+  "name": "sui-commando",
+  "version": "0.2.4-beta",
+  "description": "Commando - Natural language CLI agent for the Sui ecosystem (Windows, Linux, macOS)",
+  "bin": {
+    "cmdo": "bin/cmdo.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "bin",
+    "assets",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "dev": "ts-node src/index.ts",
+    "bootstrap": "node dist/bootstrap/postinstall.js",
+    "postinstall": "node dist/bootstrap/postinstall.js || node -e \"console.log('[commando] skipping postinstall (no build yet)')\"",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "sui",
+    "walrus",
+    "cli",
+    "agent",
+    "llm",
+    "commando",
+    "site-builder"
+  ],
+  "author": "Bernie Nguyen - bernie.web3@gmail.com",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bernieweb3/commando.git"
+  },
+  "homepage": "https://github.com/bernieweb3/commando#readme",
+  "bugs": {
+    "url": "https://github.com/bernieweb3/commando/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "win32",
+    "linux",
+    "darwin"
+  ],
+  "dependencies": {
+    "axios": "^1.7.7",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}

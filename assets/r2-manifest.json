@@ -1,0 +1,97 @@
+{
+  "version": "0.1.0-beta",
+  "generatedAt": "2026-04-17T18:08:09.219Z",
+  "binaries": [
+    {
+      "key": "binaries/site-builder/site-builder.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fsite-builder%2Fsite-builder.exe",
+      "installPath": "site-builder/site-builder.exe",
+      "size": 26883584,
+      "sha256": "69ba89a8197195c1ac28a77832fe94eb560414b354a8dccf2d2f7690ad866cca"
+    },
+    {
+      "key": "binaries/sui/move-analyzer.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fsui%2Fmove-analyzer.exe",
+      "installPath": "sui/move-analyzer.exe",
+      "size": 19132416,
+      "sha256": "8901d5a4585a0e4433ecd7e1b31704b6c013094b8ffab7129ae50dbb6db8c6a8"
+    },
+    {
+      "key": "binaries/sui/sui-bridge-cli.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fsui%2Fsui-bridge-cli.exe",
+      "installPath": "sui/sui-bridge-cli.exe",
+      "size": 17877504,
+      "sha256": "d474bbe7917c7664acb0ad565268179cff971414af93c594e77668f0d0dd5d55"
+    },
+    {
+      "key": "binaries/sui/sui-bridge.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fsui%2Fsui-bridge.exe",
+      "installPath": "sui/sui-bridge.exe",
+      "size": 22154752,
+      "sha256": "927613d25d0d3e3548e401c590fdd2f450bfc8f04c52abb2728d0bef08e35269"
+    },
+    {
+      "key": "binaries/sui/sui-debug.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fsui%2Fsui-debug.exe",
+      "installPath": "sui/sui-debug.exe",
+      "size": 395317248,
+      "sha256": "81dcfa57b4d2e44248de078fdbee038f2e74525518f69253a2dbd70b158334cd"
+    },
+    {
+      "key": "binaries/sui/sui-faucet.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fsui%2Fsui-faucet.exe",
+      "installPath": "sui/sui-faucet.exe",
+      "size": 9245696,
+      "sha256": "3adfd5e39b95cd34f744c9f11899d145713943441108f0e2a2d2aae08620e324"
+    },
+    {
+      "key": "binaries/sui/sui-node.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fsui%2Fsui-node.exe",
+      "installPath": "sui/sui-node.exe",
+      "size": 79379968,
+      "sha256": "933118d1d7845847dba8815b3b39650b76003d8bd3d8ac9c801adf89567fdba2"
+    },
+    {
+      "key": "binaries/sui/sui-test-validator.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fsui%2Fsui-test-validator.exe",
+      "installPath": "sui/sui-test-validator.exe",
+      "size": 132096,
+      "sha256": "5c4e75a977acde94434f9b3d3978de571d9314740287cfb105780ad855650d28"
+    },
+    {
+      "key": "binaries/sui/sui-tool.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fsui%2Fsui-tool.exe",
+      "installPath": "sui/sui-tool.exe",
+      "size": 57992192,
+      "sha256": "79635d710c0e33ef4e8e551112084f900c9ec1b8a3d466731641c17a305ae32e"
+    },
+    {
+      "key": "binaries/sui/sui.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fsui%2Fsui.exe",
+      "installPath": "sui/sui.exe",
+      "size": 133132800,
+      "sha256": "e09a31caf0c76d2222ef57aa4ba3efccf2e39d8df4d6327a618871fdf65eb69c"
+    },
+    {
+      "key": "binaries/walrus/walrus-node.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fwalrus%2Fwalrus-node.exe",
+      "installPath": "walrus/walrus-node.exe",
+      "size": 40303616,
+      "sha256": "6d09c2a4febfbb83ed936463c315c2853d43d82dfc8b0e6e28ceed2bb69d8a33"
+    },
+    {
+      "key": "binaries/walrus/walrus-upload-relay.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fwalrus%2Fwalrus-upload-relay.exe",
+      "installPath": "walrus/walrus-upload-relay.exe",
+      "size": 20103168,
+      "sha256": "a97d4d9055e0fa200170a94ac7d52246a02faad96d530c77ea87ae4257ebf7c9"
+    },
+    {
+      "key": "binaries/walrus/walrus.exe",
+      "url": "https://r2-worker.bernie-web3.workers.dev/object?key=binaries%2Fwalrus%2Fwalrus.exe",
+      "installPath": "walrus/walrus.exe",
+      "size": 41715200,
+      "sha256": "722c352b35fb2bb25ae87b3782f9951c2bfcab5f30c511d4161bec3df6a513e5"
+    }
+  ]
+}
